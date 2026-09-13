@@ -123,6 +123,10 @@ class _MockPtvService extends PtvRealtimeService {
 }
 
 void main() {
+  // Required because TransitViewModel calls WidgetsBinding.instance.addObserver
+  // in its constructor, which needs the binding to be available.
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('TransitViewModel Tests', () {
     late TransitViewModel viewModel;
 
@@ -132,6 +136,10 @@ void main() {
         repository: _MockRepository(),
         ptvService: _MockPtvService(),
       );
+    });
+
+    tearDown(() {
+      viewModel.dispose();
     });
 
     test('Initializes with default state and loads trips with percentage progress', () async {

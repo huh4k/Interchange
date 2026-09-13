@@ -9,6 +9,8 @@ import 'package:transit_app/src/domain/entities/station.dart';
 import 'package:transit_app/src/domain/entities/trips.dart';
 import 'package:transit_app/src/presentation/widgets/station_selector_card.dart';
 import 'package:transit_app/src/services/gtfs_parser.dart';
+import 'package:transit_app/src/presentation/state/theme_view_model.dart';
+import 'package:transit_app/src/services/settings_service.dart';
 
 class _EmptyGtfsRepository implements IGtfsRepository {
   @override
@@ -99,7 +101,11 @@ void main() {
   });
 
   testWidgets('Saved departures are reachable from navigation', (tester) async {
-    await tester.pumpWidget(TransitApp(repository: _EmptyGtfsRepository(), ptvService: _MockPtvService()));
+    await tester.pumpWidget(TransitApp(
+      repository: _EmptyGtfsRepository(),
+      ptvService: _MockPtvService(),
+      themeViewModel: ThemeViewModel(SettingsService()),
+    ));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byTooltip('Save this departure'));
@@ -112,7 +118,11 @@ void main() {
   });
 
   testWidgets('Disruptions screen is reachable from bottom navigation tab', (tester) async {
-    await tester.pumpWidget(TransitApp(repository: _EmptyGtfsRepository(), ptvService: _MockPtvService()));
+    await tester.pumpWidget(TransitApp(
+      repository: _EmptyGtfsRepository(),
+      ptvService: _MockPtvService(),
+      themeViewModel: ThemeViewModel(SettingsService()),
+    ));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Disruptions'));

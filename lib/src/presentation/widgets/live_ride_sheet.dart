@@ -35,7 +35,6 @@ class LiveRideSheet extends StatefulWidget {
 class _LiveRideSheetState extends State<LiveRideSheet> {
   String? _focusedStationName;
   StreamSubscription<Position>? _locationSubscription;
-  Timer? _realtimePollingTimer;
 
   @override
   void initState() {
@@ -44,7 +43,8 @@ class _LiveRideSheetState extends State<LiveRideSheet> {
   }
 
   void _initLiveTrackingSubscriptions() {
-    // 1. Tightly couple location stream subscription to widget lifecycle
+    // Tightly couple location stream subscription to widget lifecycle so
+    // position events update the ViewModel only when the sheet is visible.
     _locationSubscription = widget.viewModel.locationService.positionStream.listen(
       (position) {
         if (mounted) {
@@ -52,25 +52,14 @@ class _LiveRideSheetState extends State<LiveRideSheet> {
         }
       },
     );
-
-    // 2. Tightly couple realtime connection polling timer to widget lifecycle
-    _realtimePollingTimer = Timer.periodic(
-      const Duration(seconds: 20),
-      (_) {
-        if (mounted && widget.viewModel.isTrackingActive) {
-          widget.viewModel.refreshUpcomingConnections();
-        }
-      },
-    );
+    // Connection polling is now managed by TransitViewModel._trackingPollingTimer
+    // so it continues even when this sheet is not visible.
   }
 
   @override
   void dispose() {
-    // Cancel stream subscriptions and timers immediately when sheet is dismissed
     _locationSubscription?.cancel();
     _locationSubscription = null;
-    _realtimePollingTimer?.cancel();
-    _realtimePollingTimer = null;
     super.dispose();
   }
 

@@ -146,6 +146,7 @@ void main() {
     expect(find.text('End Tracking'), findsOneWidget);
 
     viewModel.stopTracking();
+    viewModel.dispose();
   });
 
   testWidgets('LiveRideSheet renders departed (previous) stop, current stop, and next stop at intermediate station', (tester) async {
@@ -175,6 +176,7 @@ void main() {
     expect(find.text('Next stop: South Yarra Station'), findsOneWidget);
 
     viewModel.stopTracking();
+    viewModel.dispose();
   });
 
   testWidgets('LiveRideSheet cleans up location stream subscriptions and polling timers on dismissal', (tester) async {
@@ -233,5 +235,6 @@ void main() {
     await tester.pump(const Duration(seconds: 25));
 
     viewModel.stopTracking();
+    viewModel.dispose();
   });
 }

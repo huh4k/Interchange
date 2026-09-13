@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../domain/entities/live_connection.dart';
@@ -11,13 +12,19 @@ import '../../services/melbourne_gtfs_service.dart';
 import '../../services/ptv_rt_service.dart';
 import '../../services/favorite_service.dart';
 
-class TransitViewModel extends ChangeNotifier {
+class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
   final IGtfsRepository repository;
   final PtvRealtimeService ptvService;
   final FavoriteService favoriteService = FavoriteService();
   final LocationService locationService;
   late final ConnectionAdvisorService connectionAdvisor;
   bool _isDisposed = false;
+
+  /// Periodically re-fetches departures every 30 seconds while the app is in the foreground.
+  Timer? _autoRefreshTimer;
+
+  /// Periodically refreshes upcoming connections while a trip is being tracked.
+  Timer? _trackingPollingTimer;
 
   int _selectedNavIndex = 0;
   PtvMode _activeMode = PtvMode.metroTrain;
@@ -63,7 +70,9 @@ class TransitViewModel extends ChangeNotifier {
               ptvService: ptvService ?? PtvRealtimeService(),
               repository: repository,
             ) {
+    WidgetsBinding.instance.addObserver(this);
     initFuture = _init();
+    _startAutoRefresh();
   }
 
   Future<void> _init() async {
@@ -86,8 +95,50 @@ class TransitViewModel extends ChangeNotifier {
   @override
   void dispose() {
     _isDisposed = true;
+    _autoRefreshTimer?.cancel();
+    _trackingPollingTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
+
+  /// Starts a 30-second periodic timer that re-fetches departure data.
+  void _startAutoRefresh() {
+    _autoRefreshTimer?.cancel();
+    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (!_isDisposed && !_isLoading) {
+        loadData(station: _selectedStation, isSilent: true);
+      }
+    });
+  }
+
+  /// Pauses or resumes the auto-refresh timer based on the app lifecycle.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _startAutoRefresh();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      _autoRefreshTimer?.cancel();
+      _autoRefreshTimer = null;
+    }
+  }
+
+  /// Starts periodic polling for upcoming connections while tracking a trip.
+  void _startTrackingPolling() {
+    _trackingPollingTimer?.cancel();
+    _trackingPollingTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+      if (!_isDisposed && _isTrackingActive) {
+        refreshUpcomingConnections();
+      }
+    });
+  }
+
+  /// Stops the tracking connection polling timer.
+  void _stopTrackingPolling() {
+    _trackingPollingTimer?.cancel();
+    _trackingPollingTimer = null;
+  }
+
 
   @override
   void notifyListeners() {
@@ -204,6 +255,7 @@ class TransitViewModel extends ChangeNotifier {
     );
 
     await refreshUpcomingConnections();
+    _startTrackingPolling();
   }
 
   void stopTracking() {
@@ -213,6 +265,7 @@ class TransitViewModel extends ChangeNotifier {
     _previousStopStation = null;
     _nextStopStation = null;
     _upcomingConnections = {};
+    _stopTrackingPolling();
     locationService.stopLocationTracking();
     notifyListeners();
   }

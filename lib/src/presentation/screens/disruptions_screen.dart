@@ -51,6 +51,7 @@ class _DisruptionsScreenState extends State<DisruptionsScreen> {
                   a.severity == ServiceStatus.cancelled;
             }
             if (_selectedSeverity == ServiceStatus.scheduled) {
+              return a.severity == ServiceStatus.scheduled ||
                   a.severity == ServiceStatus.onTime;
             }
             return a.severity == _selectedSeverity;
