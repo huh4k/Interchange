@@ -4,9 +4,19 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
+
+# Cancel in-progress runs for the same branch to save build minutes and prevent race conditions
+concurrency:
+  group: cloudflare-pages-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   deploy:
+    name: Build & Deploy to Cloudflare Pages
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -18,15 +28,29 @@ jobs:
           channel: 'stable'
           cache: true
 
+      - name: Create .env from Secret
+        env:
+          ENV_FILE: ${{ secrets.ENV_FILE }}
+        run: |
+          if [ -n "$ENV_FILE" ]; then
+            printf "%s\n" "$ENV_FILE" > .env
+          else
+            touch .env
+          fi
+
       - name: Install Dependencies
         run: flutter pub get
 
       - name: Build Web
-        run: flutter build web --release
+        run: |
+          flutter build web --release
+          # Ensure 404 fallback exists for SPA routing on Cloudflare Pages
+          cp build/web/index.html build/web/404.html
 
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy build/web --project-name=my-flutter-app
+          command: pages deploy build/web --project-name=${{ vars.CLOUDFLARE_PROJECT_NAME || 'interchange' }}
+
