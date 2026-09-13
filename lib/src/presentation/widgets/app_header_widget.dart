@@ -9,6 +9,7 @@ class AppHeaderWidget extends StatelessWidget {
   final String loadingStatus;
   final PtvMode activeMode;
   final VoidCallback onRefresh;
+  final VoidCallback? onToggleTheme;
 
   const AppHeaderWidget({
     super.key,
@@ -18,6 +19,7 @@ class AppHeaderWidget extends StatelessWidget {
     this.loadingStatus = '',
     this.activeMode = PtvMode.metroTrain,
     required this.onRefresh,
+    this.onToggleTheme,
   });
 
   @override
@@ -168,6 +170,44 @@ class AppHeaderWidget extends StatelessWidget {
                     fontSize: 13,
                     letterSpacing: 0.2,
                   ),
+                ),
+              ),
+            if (onToggleTheme != null)
+              Container(
+                margin: const EdgeInsets.only(right: 8),
+                decoration: BoxDecoration(
+                  color: theme.brightness == Brightness.dark
+                      ? const Color(0xFF1F2B47)
+                      : const Color(0xFFEDF2F9),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: theme.brightness == Brightness.dark
+                        ? const Color(0xFF2A3A56)
+                        : const Color(0xFFD0DDE8),
+                    width: 1.2,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withAlpha(5),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: IconButton(
+                  onPressed: onToggleTheme,
+                  icon: Icon(
+                    theme.brightness == Brightness.dark
+                        ? Icons.light_mode_rounded
+                        : Icons.dark_mode_rounded,
+                    size: 20,
+                    color: theme.brightness == Brightness.dark
+                        ? AppColors.statusAmber
+                        : AppColors.secondaryIndigo,
+                  ),
+                  tooltip: theme.brightness == Brightness.dark
+                      ? 'Switch to Light Mode'
+                      : 'Switch to Dark Mode',
                 ),
               ),
             Container(

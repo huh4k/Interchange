@@ -13,12 +13,14 @@ class TripDetailsSheet extends StatefulWidget {
   final Trip trip;
   final Station selectedStation;
   final TransitViewModel? viewModel;
+  final ScrollController? scrollController;
 
   const TripDetailsSheet({
     super.key,
     required this.trip,
     required this.selectedStation,
     this.viewModel,
+    this.scrollController,
   });
 
   static void show(
@@ -46,6 +48,7 @@ class TripDetailsSheet extends StatefulWidget {
               trip: trip,
               selectedStation: selectedStation,
               viewModel: viewModel,
+              scrollController: scrollController,
             );
           },
         );
@@ -229,6 +232,7 @@ class _TripDetailsSheetState extends State<TripDetailsSheet> {
     final nextStop = _nextStop;
 
     return SingleChildScrollView(
+      controller: widget.scrollController,
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

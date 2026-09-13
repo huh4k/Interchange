@@ -37,4 +37,28 @@ void main() {
     expect(find.byIcon(Icons.tram_rounded), findsAtLeastNWidgets(1));
     expect(find.byIcon(Icons.train_rounded), findsNothing);
   });
+
+  testWidgets('AppHeaderWidget renders theme toggle button and responds to tap', (tester) async {
+    bool toggled = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: AppHeaderWidget(
+            isLoading: false,
+            activeMode: PtvMode.metroTrain,
+            onRefresh: () {},
+            onToggleTheme: () => toggled = true,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byTooltip('Switch to Light Mode'), findsNothing);
+    expect(find.byTooltip('Switch to Dark Mode'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Switch to Dark Mode'));
+    await tester.pump();
+
+    expect(toggled, isTrue);
+  });
 }

@@ -182,8 +182,12 @@ class Trip {
       status: status,
     );
 
+    final rawRunRef = run['run_ref']?.toString() ?? dep['run_ref']?.toString() ?? '';
+    final fallbackId = '${route['route_id']}_${dep['scheduled_departure_utc'] ?? DateTime.now().millisecondsSinceEpoch}';
+    final tripId = rawRunRef.isNotEmpty ? rawRunRef : fallbackId;
+
     return Trip(
-      tripId: run['run_ref']?.toString() ?? dep['run_ref']?.toString() ?? '',
+      tripId: tripId,
       routeId: route['route_id']?.toString() ?? '',
       serviceId: '',
       headsign: dest,

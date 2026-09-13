@@ -544,16 +544,21 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     return filtered;
   }
 
-  Future<void> loadData({PtvMode? mode, Station? station}) async {
+  Future<void> loadData({PtvMode? mode, Station? station, bool isSilent = false}) async {
     final requestId = ++_loadRequestId;
-    _isLoading = true;
-    _loadingProgress = 0.05;
-    _loadingStatus = 'Downloading ${_activeMode == PtvMode.metroTram ? 'Tram' : 'Metro Train'} Timetable: 5%';
-    _errorMessage = null;
-    notifyListeners();
+    if (mode != null) {
+      _activeMode = mode;
+    }
+    if (!isSilent) {
+      _isLoading = true;
+      _loadingProgress = 0.05;
+      _loadingStatus = 'Downloading ${_activeMode == PtvMode.metroTram ? 'Tram' : 'Metro Train'} Timetable: 5%';
+      _errorMessage = null;
+      notifyListeners();
+    }
 
     void updateProgress(double progress, String status) {
-      if (requestId == _loadRequestId && !_isDisposed) {
+      if (!isSilent && requestId == _loadRequestId && !_isDisposed) {
         _loadingProgress = progress;
         _loadingStatus = status;
         notifyListeners();
@@ -655,18 +660,22 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
         _alerts = fetchedAlerts;
         _stations = stationList;
         _selectedStation = currentSelected;
-        _isLoading = false;
-        _loadingProgress = 1.0;
-        _loadingStatus = 'Complete';
+        if (!isSilent) {
+          _isLoading = false;
+          _loadingProgress = 1.0;
+          _loadingStatus = 'Complete';
+        }
         notifyListeners();
       }
     } catch (e) {
       if (requestId == _loadRequestId && !_isDisposed) {
-        _errorMessage = e is GtfsNetworkException
-            ? e.message
-            : 'Unable to refresh departures. Please check connection.';
-        _isLoading = false;
-        notifyListeners();
+        if (!isSilent) {
+          _errorMessage = e is GtfsNetworkException
+              ? e.message
+              : 'Unable to refresh departures. Please check connection.';
+          _isLoading = false;
+          notifyListeners();
+        }
       }
     }
   }

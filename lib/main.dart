@@ -28,31 +28,40 @@ void main() async {
 }
 
 class TransitApp extends StatelessWidget {
-  final IGtfsRepository repository;
+  final IGtfsRepository? repository;
   final PtvRealtimeService? ptvService;
-  final ThemeViewModel themeViewModel;
+  final ThemeViewModel? themeViewModel;
 
   const TransitApp({
     super.key,
-    required this.repository,
-    required this.themeViewModel,
+    this.repository,
+    this.themeViewModel,
     this.ptvService,
   });
 
   @override
   Widget build(BuildContext context) {
+    final effectiveRepo = repository ??
+        PtvGtfsRepository(
+          masterZipUrl: Uri.parse(
+            'https://gtfs.ptv.vic.gov.au/gtfs-outbound/gtfs.zip',
+          ),
+        );
+    final effectiveThemeVm =
+        themeViewModel ?? ThemeViewModel(SettingsService());
+
     return MultiProvider(
       providers: [
         // Singleton GTFS repository injected via Provider (not ChangeNotifier).
-        Provider<IGtfsRepository>.value(value: repository),
+        Provider<IGtfsRepository>.value(value: effectiveRepo),
 
         // Global theme state — consumed by MaterialApp.
-        ChangeNotifierProvider<ThemeViewModel>.value(value: themeViewModel),
+        ChangeNotifierProvider<ThemeViewModel>.value(value: effectiveThemeVm),
 
         // Global transit state — persists across navigation and tab switches.
         ChangeNotifierProvider<TransitViewModel>(
           create: (_) => TransitViewModel(
-            repository: repository,
+            repository: effectiveRepo,
             ptvService: ptvService,
           ),
         ),

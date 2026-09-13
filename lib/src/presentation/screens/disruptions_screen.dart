@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../domain/entities/station.dart';
 import '../../domain/entities/transit_route.dart';
@@ -9,7 +10,7 @@ class DisruptionsScreen extends StatefulWidget {
   final List<Station> favoriteStations;
   final Station selectedStation;
   final bool isLoading;
-  final VoidCallback onRefresh;
+  final FutureOr<void> Function() onRefresh;
   final bool initialShowAllLines;
 
   const DisruptionsScreen({
@@ -97,7 +98,7 @@ class _DisruptionsScreenState extends State<DisruptionsScreen> {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: () async => widget.onRefresh(),
+        onRefresh: () async => await widget.onRefresh(),
         color: AppColors.primaryCyan,
         child: CustomScrollView(
           slivers: [

@@ -358,5 +358,22 @@ void main() {
       expect(viewModel.previousStopStation?.stopId, equals('2722'));
       expect(viewModel.nextStopStation?.stopId, equals('2720'));
     });
+
+    test('loadData with isSilent: true refreshes departures without setting isLoading to true', () async {
+      await viewModel.loadData();
+      expect(viewModel.isLoading, isFalse);
+
+      bool wasLoadingDuringSilent = false;
+      viewModel.addListener(() {
+        if (viewModel.isLoading) {
+          wasLoadingDuringSilent = true;
+        }
+      });
+
+      await viewModel.loadData(isSilent: true);
+      expect(wasLoadingDuringSilent, isFalse);
+      expect(viewModel.isLoading, isFalse);
+      expect(viewModel.trips, isNotEmpty);
+    });
   });
 }

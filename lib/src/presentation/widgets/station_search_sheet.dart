@@ -15,6 +15,7 @@ class StationSearchSheet extends StatefulWidget {
   final Future<Station?> Function()? onLocateNearest;
   final ValueChanged<Station> onStationSelected;
   final ValueChanged<Station> onToggleFavorite;
+  final ScrollController? scrollController;
 
   const StationSearchSheet({
     super.key,
@@ -27,6 +28,7 @@ class StationSearchSheet extends StatefulWidget {
     this.onLocateNearest,
     required this.onStationSelected,
     required this.onToggleFavorite,
+    this.scrollController,
   });
 
   static Future<void> show(
@@ -69,6 +71,7 @@ class StationSearchSheet extends StatefulWidget {
                 onStationSelected(st);
               },
               onToggleFavorite: onToggleFavorite,
+              scrollController: scrollController,
             );
           },
         );
@@ -375,6 +378,7 @@ class _StationSearchSheetState extends State<StationSearchSheet> {
                   ),
                 )
               : ListView.builder(
+                  controller: widget.scrollController,
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   itemCount: results.length,
                   itemBuilder: (context, index) {

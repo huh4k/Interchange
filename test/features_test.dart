@@ -291,4 +291,50 @@ void main() {
       expect(find.text('Trip details copied to clipboard!'), findsOneWidget);
     });
   });
+
+  group('Bug Fix Regression Tests', () {
+    testWidgets('TripCardWidget displays -- when departure scheduledTime is null', (tester) async {
+      const tripWithoutDep = Trip(
+        tripId: 'trip_no_time',
+        routeId: '1',
+        serviceId: 's1',
+        headsign: 'Flinders Street',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TripCardWidget(
+              trip: tripWithoutDep,
+              isFavorite: false,
+              onToggleFavorite: () {},
+              onTap: () {},
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('--'), findsOneWidget);
+      expect(find.text('Now'), findsNothing);
+    });
+
+    test('Trip.fromPtvDeparture generates fallback tripId when run_ref is missing', () {
+      final dep = {
+        'scheduled_departure_utc': '2026-09-13T10:00:00Z',
+        'direction_id': 1,
+      };
+      final run = {
+        'destination_name': 'Flinders Street',
+      };
+      final route = {
+        'route_id': '101',
+        'route_name': 'Frankston',
+      };
+
+      final trip = Trip.fromPtvDeparture(dep, run, route);
+      expect(trip.tripId, isNotEmpty);
+      expect(trip.tripId, contains('101'));
+      expect(trip.tripId, contains('2026-09-13'));
+    });
+  });
 }

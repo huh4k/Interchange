@@ -43,6 +43,9 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final viewModel = context.watch<TransitViewModel>();
     final theme = Theme.of(context);
+    if (_searchController.text != viewModel.searchQuery && viewModel.searchQuery.isEmpty) {
+      _searchController.clear();
+    }
     final displayedTrips = viewModel.displayedTrips;
     final isSavedView = viewModel.selectedNavIndex == 1;
     final isDisruptionsView = viewModel.selectedNavIndex == 2;
@@ -59,7 +62,14 @@ class _HomeScreenState extends State<HomeScreen> {
             onRefresh: viewModel.loadData,
           ),
         ),
-        bottomNavigationBar: _buildNavigationBar(viewModel),
+        bottomNavigationBar: LayoutBuilder(
+          builder: (context, constraints) {
+            final sideMargin = constraints.maxWidth > 840
+                ? (constraints.maxWidth - 840) / 2
+                : 0.0;
+            return _buildNavigationBar(viewModel, sideMargin: sideMargin);
+          },
+        ),
       );
     }
 
@@ -71,11 +81,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 ? (constraints.maxWidth - 840) / 2
                 : 0.0;
 
-            return Stack(
-              children: [
-                // ── Main scrollable content ──────────────────────────────────
-                Padding(
-                  padding: EdgeInsets.symmetric(horizontal: sideMargin),
+            return Padding(
+              padding: EdgeInsets.symmetric(horizontal: sideMargin),
                   child: RefreshIndicator(
                     onRefresh: viewModel.loadData,
                     color: AppColors.primaryCyan,
@@ -94,6 +101,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                   loadingStatus: viewModel.loadingStatus,
                                   activeMode: viewModel.activeMode,
                                   onRefresh: viewModel.loadData,
+                                  onToggleTheme: () {
+                                    try {
+                                      final themeVm = Provider.of<ThemeViewModel>(context, listen: false);
+                                      final isDark = theme.brightness == Brightness.dark;
+                                      themeVm.setThemeMode(isDark ? ThemeMode.light : ThemeMode.dark);
+                                    } catch (_) {}
+                                  },
                                 ),
                                 if (viewModel.isLoading) ...[
                                   const SizedBox(height: 12),
@@ -410,7 +424,10 @@ class _HomeScreenState extends State<HomeScreen> {
                               isSavedView: isSavedView,
                               onReset: isSavedView
                                   ? () => viewModel.selectNavIndex(0)
-                                  : viewModel.resetFilters,
+                                  : () {
+                                      _searchController.clear();
+                                      viewModel.resetFilters();
+                                    },
                             ),
                           )
                         else
@@ -438,38 +455,36 @@ class _HomeScreenState extends State<HomeScreen> {
                               }, childCount: displayedTrips.length),
                             ),
                           ),
-
-                        // Bottom padding so the last card clears the persistent mini-player
-                        if (viewModel.isTrackingActive)
-                          const SliverToBoxAdapter(child: SizedBox(height: 80)),
                       ],
                     ),
                   ),
-                ),
+                );
+              },
+            ),
+          ),
+          bottomNavigationBar: LayoutBuilder(
+            builder: (context, constraints) {
+              final sideMargin = constraints.maxWidth > 840
+                  ? (constraints.maxWidth - 840) / 2
+                  : 0.0;
+              return _buildNavigationBar(viewModel, sideMargin: sideMargin);
+            },
+          ),
+        );
+      }
 
-                // ── Persistent Mini-Player ───────────────────────────────────
-                // Floats above the scroll content so it is visible at all times,
-                // even when the user scrolls or switches tabs.
-                if (viewModel.isTrackingActive && viewModel.activeTrackedTrip != null)
-                  Positioned(
-                    left: sideMargin,
-                    right: sideMargin,
-                    bottom: 0,
-                    child: _ActiveRideMiniPlayer(viewModel: viewModel),
-                  ),
-              ],
-            );
-          },
-        ),
-      ),
-      bottomNavigationBar: _buildNavigationBar(viewModel),
-    );
-  }
-
-  Widget _buildNavigationBar(TransitViewModel viewModel) {
-    return NavigationBar(
-      selectedIndex: viewModel.selectedNavIndex,
-      onDestinationSelected: viewModel.selectNavIndex,
+  Widget _buildNavigationBar(TransitViewModel viewModel, {double sideMargin = 0.0}) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (viewModel.isTrackingActive && viewModel.activeTrackedTrip != null)
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: sideMargin),
+            child: _ActiveRideMiniPlayer(viewModel: viewModel),
+          ),
+        NavigationBar(
+          selectedIndex: viewModel.selectedNavIndex,
+          onDestinationSelected: viewModel.selectNavIndex,
       destinations: [
         const NavigationDestination(
           icon: Icon(Icons.directions_transit_outlined),
@@ -495,7 +510,9 @@ class _HomeScreenState extends State<HomeScreen> {
           label: 'Disruptions',
         ),
       ],
-    );
+    ),
+  ],
+);
   }
 }
 
@@ -528,7 +545,7 @@ class _QuickStationStrip extends StatelessWidget {
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: combined.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 6),
+        separatorBuilder: (_, _) => const SizedBox(width: 6),
         itemBuilder: (context, index) {
           final station = combined[index];
           final isActive = station.name == viewModel.selectedStation.name;

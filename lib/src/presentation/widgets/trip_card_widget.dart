@@ -275,7 +275,9 @@ class TripCardWidget extends StatelessWidget {
                             ),
                           ),
                           child: Text(
-                            minutesAway <= 0 ? 'Now' : '$minutesAway min',
+                            scheduledTime == null
+                                ? '--'
+                                : (minutesAway <= 0 ? 'Now' : '$minutesAway min'),
                             style: const TextStyle(
                               color: AppColors.primaryCyan,
                               fontWeight: FontWeight.bold,
