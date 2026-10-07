@@ -136,18 +136,17 @@ class _TripDetailsSheetState extends State<TripDetailsSheet> {
   List<Map<String, dynamic>> get _displayStopsSequence {
     if (_stopsSequence.isEmpty) return [];
 
-    final selName = widget.selectedStation.name.toLowerCase();
     final selId = widget.selectedStation.id;
     final selStopId = widget.selectedStation.stopId;
 
-    final selNameClean = selName.replaceAll(RegExp(r'\s+'), ' ').trim();
+    final selNameClean = widget.selectedStation.normalizedName;
     int idx = _stopsSequence.indexWhere((s) {
       final st = s['station'] as Station?;
       final stopId = st?.stopId ?? '';
       final id = st?.id ?? '';
       if (selStopId.isNotEmpty && stopId == selStopId) return true;
       if (selId.isNotEmpty && id == selId) return true;
-      final name = (s['name'] as String? ?? st?.name ?? '').toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
+      final name = normalizeStationName(s['name'] as String? ?? st?.name ?? '');
       return name == selNameClean;
     });
 

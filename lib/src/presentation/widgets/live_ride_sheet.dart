@@ -98,15 +98,7 @@ class _LiveRideSheetState extends State<LiveRideSheet> {
         currentStation ?? nextStation ?? viewModel.selectedStation;
     int boardIndex = 0;
     if (trip.stops.isNotEmpty) {
-      final boardId = boardStation.id;
-      final boardStopId = boardStation.stopId;
-
-      final boardNameClean = boardStation.normalizedName;
-      final idx = trip.stops.indexWhere((s) {
-        if (boardStopId.isNotEmpty && s.station.stopId == boardStopId) return true;
-        if (boardId.isNotEmpty && s.station.id == boardId) return true;
-        return s.station.normalizedName == boardNameClean;
-      });
+      final idx = trip.stops.indexWhere((s) => s.station.isSameStopAs(boardStation));
       if (idx != -1) {
         boardIndex = idx;
       }

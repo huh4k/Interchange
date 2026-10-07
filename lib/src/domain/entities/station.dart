@@ -35,6 +35,14 @@ class Station {
   /// Name normalised for comparisons; see [normalizeStationName].
   String get normalizedName => normalizeStationName(name);
 
+  /// Whether [other] is the same physical stop: matching non-empty stop id,
+  /// matching non-empty id, or matching normalised name.
+  bool isSameStopAs(Station other) {
+    if (stopId.isNotEmpty && stopId == other.stopId) return true;
+    if (id.isNotEmpty && id == other.id) return true;
+    return normalizedName == other.normalizedName;
+  }
+
   Station copyWith({
     String? id,
     String? stopId,

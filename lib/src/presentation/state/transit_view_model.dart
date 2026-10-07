@@ -233,15 +233,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
 
     final stops = activeTrip.stops;
     if (stops.isNotEmpty) {
-      final curIdx = stops.indexWhere((s) {
-        if (currentSt.stopId.isNotEmpty && s.station.stopId == currentSt.stopId) {
-          return true;
-        }
-        if (currentSt.id.isNotEmpty && s.station.id == currentSt.id) {
-          return true;
-        }
-        return s.station.normalizedName == currentSt.normalizedName;
-      });
+      final curIdx = stops.indexWhere((s) => s.station.isSameStopAs(currentSt));
       if (curIdx != -1) {
         _onBoardStation = stops[curIdx].station;
         _previousStopStation = curIdx > 0 ? stops[curIdx - 1].station : null;
