@@ -13,7 +13,6 @@ import '../widgets/station_selector_card.dart';
 import '../widgets/transit_mode_slider.dart';
 import '../widgets/trip_card_widget.dart';
 import '../widgets/trip_details_sheet.dart';
-import '../widgets/live_ride_sheet.dart';
 import 'disruptions_screen.dart';
 
 class HomeScreen extends StatefulWidget {
