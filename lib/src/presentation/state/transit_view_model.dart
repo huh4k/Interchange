@@ -56,6 +56,9 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
   String _loadingStatus = 'Initializing...';
   String? _errorMessage;
   int _loadRequestId = 0;
+  bool _isSilentRefreshing = false;
+  bool _isRefreshingConnections = false;
+  PtvMode? _stationsLoadedForMode;
   late final Future<void> initFuture;
 
   TransitViewModel({
@@ -105,7 +108,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
   void _startAutoRefresh() {
     _autoRefreshTimer?.cancel();
     _autoRefreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (!_isDisposed && !_isLoading) {
+      if (!_isDisposed && !_isLoading && !_isSilentRefreshing) {
         loadData(station: _selectedStation, isSilent: true);
       }
     });
@@ -116,10 +119,16 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _startAutoRefresh();
+      // Data may be stale after time in the background; refresh straight away.
+      if (!_isLoading && !_isSilentRefreshing) {
+        loadData(station: _selectedStation, isSilent: true);
+      }
+      if (_isTrackingActive) _startTrackingPolling();
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive) {
       _autoRefreshTimer?.cancel();
       _autoRefreshTimer = null;
+      _stopTrackingPolling();
     }
   }
 
@@ -271,7 +280,8 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> refreshUpcomingConnections() async {
-    if (_activeTrackedTrip == null) return;
+    if (_activeTrackedTrip == null || _isRefreshingConnections) return;
+    _isRefreshingConnections = true;
     _isLoadingConnections = true;
     notifyListeners();
 
@@ -285,6 +295,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     } catch (_) {
       // Keep existing
     } finally {
+      _isRefreshingConnections = false;
       _isLoadingConnections = false;
       notifyListeners();
     }
@@ -546,6 +557,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> loadData({PtvMode? mode, Station? station, bool isSilent = false}) async {
     final requestId = ++_loadRequestId;
+    if (isSilent) _isSilentRefreshing = true;
     if (mode != null) {
       _activeMode = mode;
     }
@@ -567,10 +579,19 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
 
     try {
       // 1. Load GTFS Stations for the active mode from remote-streamed stops.txt
-      final dynamicStops = await repository.getStopsForMode(
-        _activeMode,
-        onProgress: updateProgress,
-      );
+      // Silent refreshes reuse the station list already loaded for this mode.
+      final canReuseStations = isSilent &&
+          _stationsLoadedForMode == _activeMode &&
+          _stations.length > 1;
+      final dynamicStops = canReuseStations
+          ? _stations
+          : await repository.getStopsForMode(
+              _activeMode,
+              onProgress: updateProgress,
+            );
+      if (!canReuseStations && dynamicStops.isNotEmpty) {
+        _stationsLoadedForMode = _activeMode;
+      }
 
       final stationList = dynamicStops.isNotEmpty
           ? dynamicStops
@@ -595,25 +616,35 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
 
       // 2. Fetch Live Realtime Departures (Next 1 hour window) and Disruptions directly from PTV API
       updateProgress(0.60, 'Fetching Live Realtime Departures: 60%');
-      var fetchedAlerts = <ServiceAlert>[];
-      try {
-        fetchedAlerts = await ptvService.fetchLiveDisruptions();
-      } catch (_) {}
-      if (fetchedAlerts.isEmpty) {
+      // Disruptions and departures are independent, so fetch them concurrently.
+      Future<List<ServiceAlert>> loadAlerts() async {
         try {
-          fetchedAlerts = await repository.getServiceAlerts();
+          final live = await ptvService.fetchLiveDisruptions();
+          if (live.isNotEmpty) return live;
         } catch (_) {}
+        try {
+          return await repository.getServiceAlerts();
+        } catch (_) {
+          return <ServiceAlert>[];
+        }
       }
 
-      List<Trip> livePtvTrips = [];
-      try {
-        livePtvTrips = await ptvService.fetchDepartures(
-          currentSelected.stopId,
-          station: currentSelected,
-          routeType: _activeMode.ptvRouteType, // 0 = Trains, 1 = Trams
-          maxResults: 30,
-        );
-      } catch (_) {}
+      Future<List<Trip>> loadLiveTrips() async {
+        try {
+          return await ptvService.fetchDepartures(
+            currentSelected.stopId,
+            station: currentSelected,
+            routeType: _activeMode.ptvRouteType, // 0 = Trains, 1 = Trams
+            maxResults: 30,
+          );
+        } catch (_) {
+          return <Trip>[];
+        }
+      }
+
+      final results = await Future.wait<Object>([loadAlerts(), loadLiveTrips()]);
+      final fetchedAlerts = results[0] as List<ServiceAlert>;
+      final livePtvTrips = results[1] as List<Trip>;
 
       final now = DateTime.now();
       final oneHourFromNow = now.add(const Duration(hours: 1));
@@ -677,6 +708,8 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
           notifyListeners();
         }
       }
+    } finally {
+      if (isSilent) _isSilentRefreshing = false;
     }
   }
 }
