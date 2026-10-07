@@ -57,6 +57,20 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
   String? _errorMessage;
   int _loadRequestId = 0;
   bool _isSilentRefreshing = false;
+
+  // Memoised derived lists. Widgets read these getters on every rebuild, so the
+  // results are recomputed only when their inputs change.
+  int _favoriteTripsVersion = 0;
+  int _favoriteStationsVersion = 0;
+  List<Trip>? _displayedCache;
+  List<Trip>? _displayedCacheTrips;
+  String? _displayedCacheQuery;
+  int? _displayedCacheNav;
+  int? _displayedCacheFavVersion;
+  List<ServiceAlert>? _disruptionsCache;
+  List<ServiceAlert>? _disruptionsCacheAlerts;
+  int? _disruptionsCacheFavVersion;
+  String? _disruptionsCacheStation;
   bool _isRefreshingConnections = false;
   PtvMode? _stationsLoadedForMode;
   late final Future<void> initFuture;
@@ -83,10 +97,12 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     final trips = await favoriteService.getFavoriteTrips();
     final recents = await favoriteService.getRecentStations();
     if (_favoriteStations.isEmpty && favs.isNotEmpty) {
+      _favoriteStationsVersion++;
       _favoriteStations = favs;
       _selectedStation = _favoriteStations.first;
     }
     if (_favoriteTrips.isEmpty && trips.isNotEmpty) {
+      _favoriteTripsVersion++;
       _favoriteTrips = trips;
     }
     if (recents.isNotEmpty) {
@@ -165,26 +181,36 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Disruptions filtered strictly to favorited stations (or current station if no favorites yet).
   List<ServiceAlert> get favoriteStationDisruptions {
-    if (_favoriteStations.isEmpty) {
-      final stName = _selectedStation.name.toLowerCase().replaceAll(' station', '').trim();
-      return _alerts.where((alert) {
-        final title = alert.title.toLowerCase();
-        final desc = alert.description.toLowerCase();
-        final line = alert.lineCode.toLowerCase();
-        return title.contains(stName) || desc.contains(stName) || line.contains(stName);
-      }).toList();
+    final stationKey = _favoriteStations.isEmpty ? _selectedStation.name : '';
+    final cached = _disruptionsCache;
+    if (cached != null &&
+        identical(_disruptionsCacheAlerts, _alerts) &&
+        _disruptionsCacheFavVersion == _favoriteStationsVersion &&
+        _disruptionsCacheStation == stationKey) {
+      return cached;
     }
 
-    return _alerts.where((alert) {
+    // Match against favourites, or the current station until any are saved.
+    final names = (_favoriteStations.isEmpty
+            ? [_selectedStation]
+            : _favoriteStations)
+        .map((st) => st.name.toLowerCase().replaceAll(' station', '').trim())
+        .toList();
+
+    final result = _alerts.where((alert) {
       final title = alert.title.toLowerCase();
       final desc = alert.description.toLowerCase();
       final line = alert.lineCode.toLowerCase();
-
-      return _favoriteStations.any((fav) {
-        final favName = fav.name.toLowerCase().replaceAll(' station', '').trim();
-        return title.contains(favName) || desc.contains(favName) || line.contains(favName);
-      });
+      return names.any(
+        (n) => title.contains(n) || desc.contains(n) || line.contains(n),
+      );
     }).toList();
+
+    _disruptionsCache = result;
+    _disruptionsCacheAlerts = _alerts;
+    _disruptionsCacheFavVersion = _favoriteStationsVersion;
+    _disruptionsCacheStation = stationKey;
+    return result;
   }
 
   List<Station> get stations => _stations;
@@ -494,6 +520,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> toggleFavoriteTrip(String tripId) async {
     await initFuture;
+    _favoriteTripsVersion++;
     if (_favoriteTrips.contains(tripId)) {
       _favoriteTrips.remove(tripId);
     } else {
@@ -507,6 +534,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> toggleFavoriteStation(Station station) async {
     await initFuture;
+    _favoriteStationsVersion++;
     if (_favoriteStations.any((s) => s.id == station.id || s.name == station.name)) {
       _favoriteStations.removeWhere((s) => s.id == station.id || s.name == station.name);
     } else {
@@ -538,11 +566,26 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   List<Trip> get displayedTrips {
-    final filtered = filteredTrips;
-    if (_selectedNavIndex == 1) {
-      return filtered.where((t) => _favoriteTrips.contains(t.tripId)).toList();
+    final cached = _displayedCache;
+    if (cached != null &&
+        identical(_displayedCacheTrips, _trips) &&
+        _displayedCacheQuery == _searchQuery &&
+        _displayedCacheNav == _selectedNavIndex &&
+        _displayedCacheFavVersion == _favoriteTripsVersion) {
+      return cached;
     }
-    return filtered;
+
+    final filtered = filteredTrips;
+    final result = _selectedNavIndex == 1
+        ? filtered.where((t) => _favoriteTrips.contains(t.tripId)).toList()
+        : filtered;
+
+    _displayedCache = result;
+    _displayedCacheTrips = _trips;
+    _displayedCacheQuery = _searchQuery;
+    _displayedCacheNav = _selectedNavIndex;
+    _displayedCacheFavVersion = _favoriteTripsVersion;
+    return result;
   }
 
   Future<void> loadData({PtvMode? mode, Station? station, bool isSilent = false}) async {
@@ -570,9 +613,8 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     try {
       // 1. Load GTFS Stations for the active mode from remote-streamed stops.txt
       // Silent refreshes reuse the station list already loaded for this mode.
-      final canReuseStations = isSilent &&
-          _stationsLoadedForMode == _activeMode &&
-          _stations.length > 1;
+      final canReuseStations =
+          isSilent && _stationsLoadedForMode == _activeMode;
       final dynamicStops = canReuseStations
           ? _stations
           : await repository.getStopsForMode(

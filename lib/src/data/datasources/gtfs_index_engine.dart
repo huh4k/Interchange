@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:path/path.dart' as p;
+import '../../core/heavy_work.dart';
 import '../../domain/entities/station.dart';
 
 class GtfsIndexCache {
@@ -18,6 +19,9 @@ class GtfsIndexEngine {
   static final Map<String, GtfsIndexCache> _indexCache = {};
 
   static final RegExp _newlineRegex = RegExp(r'\r?\n');
+  static final RegExp _whitespaceRegex = RegExp(r'\s+');
+  static final RegExp _stopCodeRegex = RegExp(r'#\s*(\d+[a-zA-Z]?)');
+  static final RegExp _stopUrlIdRegex = RegExp(r'/stop/(\d+)');
   static final RegExp _parentSuffixRegex = RegExp(r'[:#_\-]');
   static final RegExp _parensRegex = RegExp(r'\s*\([^)]*\)');
   static final RegExp _railwayStationRegex =
@@ -115,7 +119,7 @@ class GtfsIndexEngine {
   static Future<GtfsIndexCache?> loadBinaryIndex(File binaryFile) async {
     if (!await binaryFile.exists()) return null;
     final bytes = await binaryFile.readAsBytes();
-    return decodeBinary(bytes);
+    return runHeavy(bytes.length, () => decodeBinary(bytes));
   }
 
   /// Binary encoder for GtfsIndexCache
@@ -307,14 +311,23 @@ class GtfsIndexEngine {
       return const GtfsIndexCache(stops: {}, parentStopIdMap: {});
     }
 
+    // Detect tram mode from directory path
+    final isTramMode = modeDir.path.contains('/tram') || modeDir.path.contains('\\tram');
+    return runHeavy(
+      content.length,
+      () => _parseStopsContent(content, isTramMode: isTramMode),
+    );
+  }
+
+  static GtfsIndexCache _parseStopsContent(
+    String content, {
+    required bool isTramMode,
+  }) {
     final lines = content.split(_newlineRegex);
     if (lines.isEmpty) {
       return const GtfsIndexCache(stops: {}, parentStopIdMap: {});
     }
 
-    // Detect tram mode from directory path
-    final isTramMode = modeDir.path.contains('/tram') || modeDir.path.contains('\\tram');
-    final stopIdRegex = RegExp(r'/stop/(\d+)');
 
     final headerCols = _parseCsvRow(lines.first.replaceAll('\uFEFF', ''));
     final stopIdIdx = headerCols.indexOf('stop_id');
@@ -349,7 +362,7 @@ class GtfsIndexEngine {
 
       // Extract the PTV API numeric stop ID from stop_url (e.g. "/stop/2587/")
       final stopUrl = (stopUrlIdx != -1 && cols.length > stopUrlIdx) ? cols[stopUrlIdx] : '';
-      final urlMatch = stopIdRegex.firstMatch(stopUrl);
+      final urlMatch = _stopUrlIdRegex.firstMatch(stopUrl);
       final ptvStopId = urlMatch != null ? urlMatch.group(1)! : rawStopId;
 
       // For tram stops: preserve full intersection name (do NOT truncate on '/')
@@ -357,8 +370,8 @@ class GtfsIndexEngine {
       String cleanName;
       String code;
       if (isTramMode) {
-        cleanName = rawStopName.replaceAll(RegExp(r'\s+'), ' ').trim();
-        final stopNumMatch = RegExp(r'#\s*(\d+[a-zA-Z]?)').firstMatch(cleanName);
+        cleanName = rawStopName.replaceAll(_whitespaceRegex, ' ').trim();
+        final stopNumMatch = _stopCodeRegex.firstMatch(cleanName);
         code = stopNumMatch != null ? stopNumMatch.group(1)! : ptvStopId;
       } else {
         cleanName = normalizeStationName(rawStopName);

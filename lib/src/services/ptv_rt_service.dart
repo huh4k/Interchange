@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:http/http.dart' as http;
+import '../core/heavy_work.dart';
 import '../domain/entities/service.dart';
 import '../domain/entities/transit_route.dart';
 import '../domain/entities/station.dart';
@@ -59,6 +60,13 @@ class PtvRealtimeService {
   final http.Client _client;
   final Map<String, String> _resolvedStopIdCache = {};
 
+  static final RegExp _numericStopIdRegex = RegExp(r'^\d{3,5}$');
+
+  /// Disruptions change slowly; reuse a recent result across refresh cycles.
+  static const Duration _disruptionsTtl = Duration(seconds: 60);
+  List<ServiceAlert>? _cachedDisruptions;
+  DateTime? _disruptionsFetchedAt;
+
   static const Map<String, String> _defaultHeaders = {
     'Accept': 'application/json',
     'User-Agent': 'Mozilla/5.0 (Linux; Android) TransitApp/1.0',
@@ -99,7 +107,7 @@ class PtvRealtimeService {
     // For tram stops (routeType 1), valid PTV stop IDs are in the 2001-3418 range.
     // Do NOT apply the 19xx/20xx/22xx rejection that was intended only for metro train
     // GTFS internal platform IDs. For trains (routeType 0), keep the existing guard.
-    if (RegExp(r'^\d{3,5}$').hasMatch(station.stopId)) {
+    if (_numericStopIdRegex.hasMatch(station.stopId)) {
       final idInt = int.tryParse(station.stopId) ?? 0;
       bool isValidForMode;
       if (routeType == 1) {
@@ -167,6 +175,14 @@ class PtvRealtimeService {
   Future<List<ServiceAlert>> fetchLiveDisruptions() async {
     if (!EnvService.isConfigured) return [];
 
+    final fetchedAt = _disruptionsFetchedAt;
+    final cached = _cachedDisruptions;
+    if (cached != null &&
+        fetchedAt != null &&
+        DateTime.now().difference(fetchedAt) < _disruptionsTtl) {
+      return cached;
+    }
+
     final signedUrl = generateSignedUrl('/v3/disruptions');
     try {
       final response = await _client.get(
@@ -175,7 +191,11 @@ class PtvRealtimeService {
       );
       if (response.statusCode != 200) return [];
 
-      final data = json.decode(response.body) as Map<String, dynamic>;
+      final body = response.body;
+      final data = await runHeavy<Map<String, dynamic>>(
+        body.length,
+        () => json.decode(body) as Map<String, dynamic>,
+      );
       final disruptionsObj = data['disruptions'] as Map<String, dynamic>?;
       if (disruptionsObj == null) return [];
 
@@ -209,6 +229,8 @@ class PtvRealtimeService {
           }
         }
       });
+      _cachedDisruptions = alerts;
+      _disruptionsFetchedAt = DateTime.now();
       return alerts;
     } catch (_) {
       return [];
@@ -259,7 +281,7 @@ class PtvRealtimeService {
     String numericStopId = stopId;
     if (station != null) {
       numericStopId = await resolveStopIdForStation(station, routeType: routeType);
-    } else if (!RegExp(r'^\d{3,5}$').hasMatch(stopId)) {
+    } else if (!_numericStopIdRegex.hasMatch(stopId)) {
       final tempStation = Station(
         id: stopId,
         stopId: stopId,
