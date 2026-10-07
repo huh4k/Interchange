@@ -240,9 +240,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
         if (currentSt.id.isNotEmpty && s.station.id == currentSt.id) {
           return true;
         }
-        final sName = s.station.name.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
-        final cName = currentSt.name.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
-        return sName == cName;
+        return s.station.normalizedName == currentSt.normalizedName;
       });
       if (curIdx != -1) {
         _onBoardStation = stops[curIdx].station;
@@ -598,12 +596,12 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
           : [MelbourneGtfsService.defaultStationForMode(_activeMode)];
 
       final requestedStation = station ?? _selectedStation;
-      final reqNameClean = requestedStation.name.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
+      final reqNameClean = requestedStation.normalizedName;
       final currentSelected = stationList.firstWhere(
         (s) =>
             (requestedStation.stopId.isNotEmpty && s.stopId == requestedStation.stopId) ||
             (requestedStation.id.isNotEmpty && s.id == requestedStation.id) ||
-            s.name.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim() == reqNameClean,
+            s.normalizedName == reqNameClean,
         orElse: () => requestedStation,
       );
 

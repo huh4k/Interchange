@@ -98,16 +98,14 @@ class _LiveRideSheetState extends State<LiveRideSheet> {
         currentStation ?? nextStation ?? viewModel.selectedStation;
     int boardIndex = 0;
     if (trip.stops.isNotEmpty) {
-      final boardName = boardStation.name.toLowerCase();
       final boardId = boardStation.id;
       final boardStopId = boardStation.stopId;
 
-      final boardNameClean = boardName.replaceAll(RegExp(r'\s+'), ' ').trim();
+      final boardNameClean = boardStation.normalizedName;
       final idx = trip.stops.indexWhere((s) {
         if (boardStopId.isNotEmpty && s.station.stopId == boardStopId) return true;
         if (boardId.isNotEmpty && s.station.id == boardId) return true;
-        final sName = s.station.name.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
-        return sName == boardNameClean;
+        return s.station.normalizedName == boardNameClean;
       });
       if (idx != -1) {
         boardIndex = idx;
@@ -487,10 +485,10 @@ class _LiveRideSheetState extends State<LiveRideSheet> {
                           connections: connections,
                           isCurrentStop: (currentStation != null && currentStation.stopId.isNotEmpty && currentStation.stopId == station.stopId) ||
                               (currentStation != null && currentStation.id.isNotEmpty && currentStation.id == station.id) ||
-                              currentStation?.name.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim() == station.name.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim(),
+                              currentStation?.normalizedName == station.normalizedName,
                           isNextStop: (nextStation != null && nextStation.stopId.isNotEmpty && nextStation.stopId == station.stopId) ||
                               (nextStation != null && nextStation.id.isNotEmpty && nextStation.id == station.id) ||
-                              nextStation?.name.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim() == station.name.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim(),
+                              nextStation?.normalizedName == station.normalizedName,
                         );
                       }),
               ],

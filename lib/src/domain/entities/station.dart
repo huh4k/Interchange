@@ -1,5 +1,12 @@
 import 'transit_route.dart';
 
+final RegExp _whitespaceRun = RegExp(r'\s+');
+
+/// Lower-cases [name] and collapses whitespace so station names from
+/// different sources (GTFS, PTV API, user input) can be compared reliably.
+String normalizeStationName(String name) =>
+    name.toLowerCase().replaceAll(_whitespaceRun, ' ').trim();
+
 class Station {
   final String id;
   final String stopId;
@@ -24,6 +31,9 @@ class Station {
     this.isCityLoop = false,
     required this.routes,
   });
+
+  /// Name normalised for comparisons; see [normalizeStationName].
+  String get normalizedName => normalizeStationName(name);
 
   Station copyWith({
     String? id,
