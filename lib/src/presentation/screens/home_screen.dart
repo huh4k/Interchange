@@ -4,9 +4,11 @@ import '../../data/repositories/gtfs_repository.dart';
 import '../../theme/app_theme.dart';
 import '../state/transit_view_model.dart';
 import '../state/theme_view_model.dart';
+import '../widgets/active_ride_mini_player.dart';
 import '../widgets/alert_banner_widget.dart';
 import '../widgets/app_header_widget.dart';
 import '../widgets/empty_state_widget.dart';
+import '../widgets/quick_station_strip.dart';
 import '../widgets/station_selector_card.dart';
 import '../widgets/transit_mode_slider.dart';
 import '../widgets/trip_card_widget.dart';
@@ -133,7 +135,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 const SizedBox(height: 10),
 
                                 // ── Quick Station Strip ─────────────────────
-                                _QuickStationStrip(viewModel: viewModel),
+                                QuickStationStrip(viewModel: viewModel),
                                 const SizedBox(height: 10),
 
                                 // Station Selector Card with Instant Search & Favorite Action
@@ -480,7 +482,7 @@ class _HomeScreenState extends State<HomeScreen> {
         if (viewModel.isTrackingActive && viewModel.activeTrackedTrip != null)
           Padding(
             padding: EdgeInsets.symmetric(horizontal: sideMargin),
-            child: _ActiveRideMiniPlayer(viewModel: viewModel),
+            child: ActiveRideMiniPlayer(viewModel: viewModel),
           ),
         NavigationBar(
           selectedIndex: viewModel.selectedNavIndex,
@@ -513,190 +515,5 @@ class _HomeScreenState extends State<HomeScreen> {
     ),
   ],
 );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Quick Station Strip
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// Horizontal scrollable row of pill chips for favorite + recent stations,
-/// allowing 1-tap switching without opening the full station picker.
-class _QuickStationStrip extends StatelessWidget {
-  final TransitViewModel viewModel;
-
-  const _QuickStationStrip({required this.viewModel});
-
-  @override
-  Widget build(BuildContext context) {
-    final favorites = viewModel.favoriteStations;
-    final recents = viewModel.recentStations;
-
-    // Show only stations relevant to the active mode; combine favorites first then recents.
-    final combined = [
-      ...favorites,
-      ...recents.where((r) => !favorites.any((f) => f.id == r.id || f.name == r.name)),
-    ];
-
-    if (combined.isEmpty) return const SizedBox.shrink();
-
-    return SizedBox(
-      height: 34,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: combined.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 6),
-        itemBuilder: (context, index) {
-          final station = combined[index];
-          final isActive = station.name == viewModel.selectedStation.name;
-          final isFav = viewModel.isFavoriteStation(station);
-
-          return Semantics(
-            label: '${isActive ? 'Currently selected: ' : ''}${station.name}',
-            button: true,
-            child: GestureDetector(
-              onTap: () {
-                viewModel.selectStation(station);
-                if (viewModel.selectedNavIndex != 0) {
-                  viewModel.selectNavIndex(0);
-                }
-              },
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: isActive
-                      ? AppColors.primaryCyan
-                      : Theme.of(context).cardColor,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: isActive
-                        ? AppColors.primaryCyan
-                        : Theme.of(context).dividerColor.withAlpha(50),
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (isFav) ...[
-                      Icon(
-                        Icons.star_rounded,
-                        size: 11,
-                        color: isActive ? Colors.white : AppColors.statusAmber,
-                      ),
-                      const SizedBox(width: 4),
-                    ],
-                    Text(
-                      // Strip " Station" suffix for compactness
-                      station.name.replaceAll(RegExp(r'\s+[Ss]tation$'), ''),
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
-                        color: isActive
-                            ? Colors.white
-                            : Theme.of(context).textTheme.bodyMedium?.color,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Persistent Active Ride Mini-Player
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// A compact banner that stays pinned above the navigation bar when a trip
-/// is being tracked, even as the user scrolls or switches tabs.
-class _ActiveRideMiniPlayer extends StatelessWidget {
-  final TransitViewModel viewModel;
-
-  const _ActiveRideMiniPlayer({required this.viewModel});
-
-  @override
-  Widget build(BuildContext context) {
-    final trip = viewModel.activeTrackedTrip!;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => LiveRideSheet.show(context, viewModel),
-          borderRadius: BorderRadius.circular(18),
-          child: Ink(
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [AppColors.primaryCyan, AppColors.secondaryIndigo],
-              ),
-              borderRadius: BorderRadius.circular(18),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.primaryCyan.withAlpha(100),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(7),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withAlpha(30),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.gps_fixed_rounded,
-                      color: Colors.white,
-                      size: 16,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text(
-                          'ON-BOARD TRACKING ACTIVE',
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 9,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.8,
-                          ),
-                        ),
-                        const SizedBox(height: 1),
-                        Text(
-                          'To ${trip.destinationName}'
-                          '${viewModel.currentStopStation?.name != null ? ' • ${viewModel.currentStopStation!.name}' : ''}'
-                          '${viewModel.nextStopStation != null ? ' → ${viewModel.nextStopStation!.name}' : ''}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Icon(Icons.chevron_right_rounded, color: Colors.white),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
   }
 }

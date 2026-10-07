@@ -604,6 +604,11 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
 
     void updateProgress(double progress, String status) {
       if (!isSilent && requestId == _loadRequestId && !_isDisposed) {
+        // Skip sub-percent updates: each notify rebuilds the whole home screen.
+        if ((progress * 100).floor() == (_loadingProgress * 100).floor() &&
+            status == _loadingStatus) {
+          return;
+        }
         _loadingProgress = progress;
         _loadingStatus = status;
         notifyListeners();
