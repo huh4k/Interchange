@@ -127,8 +127,11 @@ void main() {
     test('fetchLiveDisruptions keeps only train, tram, V/Line and general buckets', () async {
       Map<String, dynamic> item(int id) =>
           {'disruption_id': id, 'title': 'T$id', 'description': 'd', 'routes': []};
+      Uri? requested;
       final service = PtvRealtimeService(
-        client: MockClient((_) async => http.Response(
+        client: MockClient((req) async {
+          requested = req.url;
+          return http.Response(
               jsonEncode({
                 'disruptions': {
                   'metro_train': [item(1)],
@@ -140,9 +143,12 @@ void main() {
                 },
               }),
               200,
-            )),
+            );
+        }),
       );
       final alerts = await service.fetchLiveDisruptions();
+      expect(requested!.queryParametersAll['route_types'], ['0', '1', '3']);
+      expect(requested!.queryParameters['signature'], isNotEmpty);
       expect(alerts.map((a) => a.id).toSet(), {'1', '2', '3', '4'});
     });
 

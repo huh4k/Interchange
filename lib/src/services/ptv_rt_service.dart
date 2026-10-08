@@ -131,6 +131,11 @@ class PtvRealtimeService {
   List<ServiceAlert>? _cachedDisruptions;
   Future<List<ServiceAlert>>? _disruptionsInFlight;
 
+  /// Only metro train (0), tram (1) and V/Line (3) disruptions are requested:
+  /// the unfiltered feed is ~260 KB, mostly buses, versus ~70 KB filtered.
+  static const String _disruptionsPath =
+      '/v3/disruptions?route_types=0&route_types=1&route_types=3';
+
   /// Disruption buckets the app shows: metro train/tram, V/Line and network-wide
   /// notices. Bus, coach, ferry and similar buckets are skipped.
   static const Set<String> _relevantDisruptionModes = {
@@ -324,7 +329,7 @@ class PtvRealtimeService {
   }
 
   Future<List<ServiceAlert>> _downloadDisruptions() async {
-    final signedUrl = generateSignedUrl('/v3/disruptions');
+    final signedUrl = generateSignedUrl(_disruptionsPath);
     try {
       final response = await _get(signedUrl);
       if (response.statusCode != 200) return [];
