@@ -57,6 +57,11 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
   String? _errorMessage;
   int _loadRequestId = 0;
   bool _isSilentRefreshing = false;
+
+  /// Data younger than this is not refetched when the app resumes.
+  static const Duration _resumeRefreshThreshold = Duration(seconds: 15);
+  final DateTime Function() _clock;
+  DateTime? _lastRefreshAt;
   StreamSubscription<Position>? _positionSub;
 
   // Memoised derived lists. Widgets read these getters on every rebuild, so the
@@ -83,7 +88,9 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     PtvRealtimeService? ptvService,
     LocationService? locationService,
     ConnectionAdvisorService? connectionAdvisor,
-  })  : ptvService = ptvService ?? PtvRealtimeService(),
+    DateTime Function()? clock,
+  })  : _clock = clock ?? DateTime.now,
+        ptvService = ptvService ?? PtvRealtimeService(),
         locationService = locationService ?? LocationService() {
     // Built here (not in the initializer list) so the advisor shares this
     // view model's PtvRealtimeService, including its caches and connection.
@@ -131,28 +138,41 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
   /// Starts a 30-second periodic timer that re-fetches departure data.
   void _startAutoRefresh() {
     _autoRefreshTimer?.cancel();
-    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (!_isDisposed && !_isLoading && !_isSilentRefreshing) {
-        loadData(station: _selectedStation, isSilent: true);
-      }
-    });
+    _autoRefreshTimer = _newAutoRefreshTimer();
   }
+
+  Timer _newAutoRefreshTimer() => Timer.periodic(const Duration(seconds: 30), (_) {
+        if (!_isDisposed && !_isLoading && !_isSilentRefreshing) {
+          loadData(station: _selectedStation, isSilent: true);
+        }
+      });
 
   /// Pauses or resumes the auto-refresh timer based on the app lifecycle.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      _startAutoRefresh();
-      // Data may be stale after time in the background; refresh straight away.
-      if (!_isLoading && !_isSilentRefreshing) {
-        loadData(station: _selectedStation, isSilent: true);
-      }
-      if (_isTrackingActive) _startTrackingPolling();
-    } else if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.inactive) {
-      _autoRefreshTimer?.cancel();
-      _autoRefreshTimer = null;
-      _stopTrackingPolling();
+    switch (state) {
+      case AppLifecycleState.resumed:
+        // Restart only timers that were stopped while in the background.
+        _autoRefreshTimer ??= _newAutoRefreshTimer();
+        if (_isTrackingActive && _trackingPollingTimer == null) {
+          _startTrackingPolling();
+        }
+        // Skip the refetch for brief inactive->resumed blips (permission
+        // dialogs, notification shade) when the data is still fresh.
+        final last = _lastRefreshAt;
+        final fresh =
+            last != null && _clock().difference(last) < _resumeRefreshThreshold;
+        if (!fresh && !_isLoading && !_isSilentRefreshing) {
+          loadData(station: _selectedStation, isSilent: true);
+        }
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.paused:
+        _autoRefreshTimer?.cancel();
+        _autoRefreshTimer = null;
+        _stopTrackingPolling();
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.detached:
+        break;
     }
   }
 
@@ -688,6 +708,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
       _activeMode = mode;
     }
     if (!isSilent) {
+      _lastRefreshAt = null;
       _isLoading = true;
       _loadingProgress = 0.05;
       _loadingStatus = 'Downloading ${_activeMode == PtvMode.metroTram ? 'Tram' : 'Metro Train'} Timetable: 5%';
@@ -860,6 +881,9 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
           _loadingProgress = 1.0;
           _loadingStatus = 'Complete';
         }
+        _lastRefreshAt = _clock();
+        // Count the next auto-refresh from this load, not from app start.
+        if (_autoRefreshTimer != null) _startAutoRefresh();
         notifyListeners();
       }
     } catch (e) {

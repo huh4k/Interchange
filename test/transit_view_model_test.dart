@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/widgets.dart' show AppLifecycleState;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gtfs_bindings/schedule.dart' as gtfs;
 import 'package:transit_app/src/data/repositories/gtfs_repository.dart';
@@ -577,6 +578,49 @@ void main() {
         await tester.pump(const Duration(seconds: 60));
         expect(advisor.calls, before); // back to 90s cadence
         vm.stopTracking();
+        vm.dispose();
+      });
+    });
+
+    group('lifecycle refresh', () {
+      test('inactive->resumed right after a load does not refetch; stale data does', () async {
+        var now = DateTime(2026, 1, 1, 12);
+        final ptv = _RecordingPtv();
+        final vm = TransitViewModel(
+          repository: _MockRepository(),
+          ptvService: ptv,
+          clock: () => now,
+        );
+        addTearDown(vm.dispose);
+        await vm.loadData();
+        final base = ptv.departureStopIds.length;
+
+        vm.didChangeAppLifecycleState(AppLifecycleState.inactive);
+        vm.didChangeAppLifecycleState(AppLifecycleState.resumed);
+        await pumpEventQueue();
+        expect(ptv.departureStopIds.length, base);
+
+        now = now.add(const Duration(seconds: 20));
+        vm.didChangeAppLifecycleState(AppLifecycleState.resumed);
+        await pumpEventQueue();
+        expect(ptv.departureStopIds.length, base + 1);
+      });
+
+      testWidgets('auto refresh ticks 30s after the last completed load', (tester) async {
+        final ptv = _RecordingPtv();
+        final vm = TransitViewModel(repository: _MockRepository(), ptvService: ptv);
+        await vm.loadData();
+        final base = ptv.departureStopIds.length;
+
+        await tester.pump(const Duration(seconds: 20));
+        await vm.loadData(); // user-initiated load re-arms the timer
+        final afterManual = ptv.departureStopIds.length;
+        expect(afterManual, base + 1);
+
+        await tester.pump(const Duration(seconds: 29));
+        expect(ptv.departureStopIds.length, afterManual);
+        await tester.pump(const Duration(seconds: 2));
+        expect(ptv.departureStopIds.length, afterManual + 1);
         vm.dispose();
       });
     });
