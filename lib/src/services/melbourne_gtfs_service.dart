@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
+import '../core/heavy_work.dart';
 import '../domain/entities/station.dart';
 import '../domain/value_objects/ptv_mode.dart';
 import '../data/datasources/gtfs_index_engine.dart';
@@ -165,7 +166,10 @@ class MelbourneGtfsService {
       try {
         final content = await targetFile.readAsString();
         if (content.trim().isNotEmpty) {
-          final stations = parseStopsTxt(content, mode: mode);
+          final stations = await runHeavy(
+            content.length,
+            () => parseStopsTxt(content, mode: mode),
+          );
           final fallbackStation = defaultStationForMode(mode);
           if (stations.isNotEmpty &&
               (stations.length > 1 || stations.first.id != fallbackStation.id || content.contains('stop_id'))) {

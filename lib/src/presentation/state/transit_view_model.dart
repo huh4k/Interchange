@@ -56,6 +56,23 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
   String _loadingStatus = 'Initializing...';
   String? _errorMessage;
   int _loadRequestId = 0;
+  bool _isSilentRefreshing = false;
+
+  // Memoised derived lists. Widgets read these getters on every rebuild, so the
+  // results are recomputed only when their inputs change.
+  int _favoriteTripsVersion = 0;
+  int _favoriteStationsVersion = 0;
+  List<Trip>? _displayedCache;
+  List<Trip>? _displayedCacheTrips;
+  String? _displayedCacheQuery;
+  int? _displayedCacheNav;
+  int? _displayedCacheFavVersion;
+  List<ServiceAlert>? _disruptionsCache;
+  List<ServiceAlert>? _disruptionsCacheAlerts;
+  int? _disruptionsCacheFavVersion;
+  String? _disruptionsCacheStation;
+  bool _isRefreshingConnections = false;
+  PtvMode? _stationsLoadedForMode;
   late final Future<void> initFuture;
 
   TransitViewModel({
@@ -80,10 +97,12 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     final trips = await favoriteService.getFavoriteTrips();
     final recents = await favoriteService.getRecentStations();
     if (_favoriteStations.isEmpty && favs.isNotEmpty) {
+      _favoriteStationsVersion++;
       _favoriteStations = favs;
       _selectedStation = _favoriteStations.first;
     }
     if (_favoriteTrips.isEmpty && trips.isNotEmpty) {
+      _favoriteTripsVersion++;
       _favoriteTrips = trips;
     }
     if (recents.isNotEmpty) {
@@ -105,7 +124,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
   void _startAutoRefresh() {
     _autoRefreshTimer?.cancel();
     _autoRefreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (!_isDisposed && !_isLoading) {
+      if (!_isDisposed && !_isLoading && !_isSilentRefreshing) {
         loadData(station: _selectedStation, isSilent: true);
       }
     });
@@ -116,10 +135,16 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _startAutoRefresh();
+      // Data may be stale after time in the background; refresh straight away.
+      if (!_isLoading && !_isSilentRefreshing) {
+        loadData(station: _selectedStation, isSilent: true);
+      }
+      if (_isTrackingActive) _startTrackingPolling();
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive) {
       _autoRefreshTimer?.cancel();
       _autoRefreshTimer = null;
+      _stopTrackingPolling();
     }
   }
 
@@ -156,26 +181,36 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Disruptions filtered strictly to favorited stations (or current station if no favorites yet).
   List<ServiceAlert> get favoriteStationDisruptions {
-    if (_favoriteStations.isEmpty) {
-      final stName = _selectedStation.name.toLowerCase().replaceAll(' station', '').trim();
-      return _alerts.where((alert) {
-        final title = alert.title.toLowerCase();
-        final desc = alert.description.toLowerCase();
-        final line = alert.lineCode.toLowerCase();
-        return title.contains(stName) || desc.contains(stName) || line.contains(stName);
-      }).toList();
+    final stationKey = _favoriteStations.isEmpty ? _selectedStation.name : '';
+    final cached = _disruptionsCache;
+    if (cached != null &&
+        identical(_disruptionsCacheAlerts, _alerts) &&
+        _disruptionsCacheFavVersion == _favoriteStationsVersion &&
+        _disruptionsCacheStation == stationKey) {
+      return cached;
     }
 
-    return _alerts.where((alert) {
+    // Match against favourites, or the current station until any are saved.
+    final names = (_favoriteStations.isEmpty
+            ? [_selectedStation]
+            : _favoriteStations)
+        .map((st) => st.name.toLowerCase().replaceAll(' station', '').trim())
+        .toList();
+
+    final result = _alerts.where((alert) {
       final title = alert.title.toLowerCase();
       final desc = alert.description.toLowerCase();
       final line = alert.lineCode.toLowerCase();
-
-      return _favoriteStations.any((fav) {
-        final favName = fav.name.toLowerCase().replaceAll(' station', '').trim();
-        return title.contains(favName) || desc.contains(favName) || line.contains(favName);
-      });
+      return names.any(
+        (n) => title.contains(n) || desc.contains(n) || line.contains(n),
+      );
     }).toList();
+
+    _disruptionsCache = result;
+    _disruptionsCacheAlerts = _alerts;
+    _disruptionsCacheFavVersion = _favoriteStationsVersion;
+    _disruptionsCacheStation = stationKey;
+    return result;
   }
 
   List<Station> get stations => _stations;
@@ -224,17 +259,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
 
     final stops = activeTrip.stops;
     if (stops.isNotEmpty) {
-      final curIdx = stops.indexWhere((s) {
-        if (currentSt.stopId.isNotEmpty && s.station.stopId == currentSt.stopId) {
-          return true;
-        }
-        if (currentSt.id.isNotEmpty && s.station.id == currentSt.id) {
-          return true;
-        }
-        final sName = s.station.name.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
-        final cName = currentSt.name.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
-        return sName == cName;
-      });
+      final curIdx = stops.indexWhere((s) => s.station.isSameStopAs(currentSt));
       if (curIdx != -1) {
         _onBoardStation = stops[curIdx].station;
         _previousStopStation = curIdx > 0 ? stops[curIdx - 1].station : null;
@@ -271,7 +296,8 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> refreshUpcomingConnections() async {
-    if (_activeTrackedTrip == null) return;
+    if (_activeTrackedTrip == null || _isRefreshingConnections) return;
+    _isRefreshingConnections = true;
     _isLoadingConnections = true;
     notifyListeners();
 
@@ -285,6 +311,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     } catch (_) {
       // Keep existing
     } finally {
+      _isRefreshingConnections = false;
       _isLoadingConnections = false;
       notifyListeners();
     }
@@ -493,6 +520,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> toggleFavoriteTrip(String tripId) async {
     await initFuture;
+    _favoriteTripsVersion++;
     if (_favoriteTrips.contains(tripId)) {
       _favoriteTrips.remove(tripId);
     } else {
@@ -506,6 +534,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> toggleFavoriteStation(Station station) async {
     await initFuture;
+    _favoriteStationsVersion++;
     if (_favoriteStations.any((s) => s.id == station.id || s.name == station.name)) {
       _favoriteStations.removeWhere((s) => s.id == station.id || s.name == station.name);
     } else {
@@ -537,15 +566,31 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   List<Trip> get displayedTrips {
-    final filtered = filteredTrips;
-    if (_selectedNavIndex == 1) {
-      return filtered.where((t) => _favoriteTrips.contains(t.tripId)).toList();
+    final cached = _displayedCache;
+    if (cached != null &&
+        identical(_displayedCacheTrips, _trips) &&
+        _displayedCacheQuery == _searchQuery &&
+        _displayedCacheNav == _selectedNavIndex &&
+        _displayedCacheFavVersion == _favoriteTripsVersion) {
+      return cached;
     }
-    return filtered;
+
+    final filtered = filteredTrips;
+    final result = _selectedNavIndex == 1
+        ? filtered.where((t) => _favoriteTrips.contains(t.tripId)).toList()
+        : filtered;
+
+    _displayedCache = result;
+    _displayedCacheTrips = _trips;
+    _displayedCacheQuery = _searchQuery;
+    _displayedCacheNav = _selectedNavIndex;
+    _displayedCacheFavVersion = _favoriteTripsVersion;
+    return result;
   }
 
   Future<void> loadData({PtvMode? mode, Station? station, bool isSilent = false}) async {
     final requestId = ++_loadRequestId;
+    if (isSilent) _isSilentRefreshing = true;
     if (mode != null) {
       _activeMode = mode;
     }
@@ -559,6 +604,11 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
 
     void updateProgress(double progress, String status) {
       if (!isSilent && requestId == _loadRequestId && !_isDisposed) {
+        // Skip sub-percent updates: each notify rebuilds the whole home screen.
+        if ((progress * 100).floor() == (_loadingProgress * 100).floor() &&
+            status == _loadingStatus) {
+          return;
+        }
         _loadingProgress = progress;
         _loadingStatus = status;
         notifyListeners();
@@ -567,22 +617,30 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
 
     try {
       // 1. Load GTFS Stations for the active mode from remote-streamed stops.txt
-      final dynamicStops = await repository.getStopsForMode(
-        _activeMode,
-        onProgress: updateProgress,
-      );
+      // Silent refreshes reuse the station list already loaded for this mode.
+      final canReuseStations =
+          isSilent && _stationsLoadedForMode == _activeMode;
+      final dynamicStops = canReuseStations
+          ? _stations
+          : await repository.getStopsForMode(
+              _activeMode,
+              onProgress: updateProgress,
+            );
+      if (!canReuseStations && dynamicStops.isNotEmpty) {
+        _stationsLoadedForMode = _activeMode;
+      }
 
       final stationList = dynamicStops.isNotEmpty
           ? dynamicStops
           : [MelbourneGtfsService.defaultStationForMode(_activeMode)];
 
       final requestedStation = station ?? _selectedStation;
-      final reqNameClean = requestedStation.name.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
+      final reqNameClean = requestedStation.normalizedName;
       final currentSelected = stationList.firstWhere(
         (s) =>
             (requestedStation.stopId.isNotEmpty && s.stopId == requestedStation.stopId) ||
             (requestedStation.id.isNotEmpty && s.id == requestedStation.id) ||
-            s.name.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim() == reqNameClean,
+            s.normalizedName == reqNameClean,
         orElse: () => requestedStation,
       );
 
@@ -595,25 +653,35 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
 
       // 2. Fetch Live Realtime Departures (Next 1 hour window) and Disruptions directly from PTV API
       updateProgress(0.60, 'Fetching Live Realtime Departures: 60%');
-      var fetchedAlerts = <ServiceAlert>[];
-      try {
-        fetchedAlerts = await ptvService.fetchLiveDisruptions();
-      } catch (_) {}
-      if (fetchedAlerts.isEmpty) {
+      // Disruptions and departures are independent, so fetch them concurrently.
+      Future<List<ServiceAlert>> loadAlerts() async {
         try {
-          fetchedAlerts = await repository.getServiceAlerts();
+          final live = await ptvService.fetchLiveDisruptions();
+          if (live.isNotEmpty) return live;
         } catch (_) {}
+        try {
+          return await repository.getServiceAlerts();
+        } catch (_) {
+          return <ServiceAlert>[];
+        }
       }
 
-      List<Trip> livePtvTrips = [];
-      try {
-        livePtvTrips = await ptvService.fetchDepartures(
-          currentSelected.stopId,
-          station: currentSelected,
-          routeType: _activeMode.ptvRouteType, // 0 = Trains, 1 = Trams
-          maxResults: 30,
-        );
-      } catch (_) {}
+      Future<List<Trip>> loadLiveTrips() async {
+        try {
+          return await ptvService.fetchDepartures(
+            currentSelected.stopId,
+            station: currentSelected,
+            routeType: _activeMode.ptvRouteType, // 0 = Trains, 1 = Trams
+            maxResults: 30,
+          );
+        } catch (_) {
+          return <Trip>[];
+        }
+      }
+
+      final results = await Future.wait<Object>([loadAlerts(), loadLiveTrips()]);
+      final fetchedAlerts = results[0] as List<ServiceAlert>;
+      final livePtvTrips = results[1] as List<Trip>;
 
       final now = DateTime.now();
       final oneHourFromNow = now.add(const Duration(hours: 1));
@@ -677,6 +745,8 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
           notifyListeners();
         }
       }
+    } finally {
+      if (isSilent) _isSilentRefreshing = false;
     }
   }
 }

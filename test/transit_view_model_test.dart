@@ -83,6 +83,20 @@ class _MockRepository implements IGtfsRepository {
   }
 }
 
+class _CountingRepository extends _MockRepository {
+  int stopCalls = 0;
+
+  @override
+  Future<List<Station>> getStopsForMode(
+    PtvMode mode, {
+    bool forceRefresh = false,
+    GtfsProgressCallback? onProgress,
+  }) {
+    stopCalls++;
+    return super.getStopsForMode(mode, forceRefresh: forceRefresh, onProgress: onProgress);
+  }
+}
+
 class _MockPtvService extends PtvRealtimeService {
   @override
   Future<List<ServiceAlert>> fetchLiveDisruptions() async => [];
@@ -140,6 +154,35 @@ void main() {
 
     tearDown(() {
       viewModel.dispose();
+    });
+
+    test('displayedTrips is memoised and invalidated by query and favorites', () async {
+      await viewModel.loadData();
+      final first = viewModel.displayedTrips;
+      expect(identical(first, viewModel.displayedTrips), isTrue);
+
+      viewModel.updateSearchQuery('belgrave');
+      final filtered = viewModel.displayedTrips;
+      expect(identical(first, filtered), isFalse);
+      expect(filtered.length, 1);
+
+      viewModel.updateSearchQuery('');
+      viewModel.selectNavIndex(1);
+      expect(viewModel.displayedTrips, isEmpty);
+      await viewModel.toggleFavoriteTrip('trip_belgrave');
+      expect(viewModel.displayedTrips.map((t) => t.tripId), ['trip_belgrave']);
+    });
+
+    test('silent refresh reuses the loaded station list', () async {
+      final repo = _CountingRepository();
+      final vm = TransitViewModel(repository: repo, ptvService: _MockPtvService());
+      addTearDown(vm.dispose);
+      await vm.loadData();
+      expect(repo.stopCalls, 1);
+      await vm.loadData(isSilent: true);
+      expect(repo.stopCalls, 1);
+      await vm.loadData();
+      expect(repo.stopCalls, 2);
     });
 
     test('Initializes with default state and loads trips with percentage progress', () async {
