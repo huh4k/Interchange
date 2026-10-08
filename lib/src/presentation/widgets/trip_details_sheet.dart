@@ -61,7 +61,8 @@ class TripDetailsSheet extends StatefulWidget {
 }
 
 class _TripDetailsSheetState extends State<TripDetailsSheet> {
-  final PtvRealtimeService _ptvService = PtvRealtimeService();
+  late final PtvRealtimeService _ptvService =
+      widget.viewModel?.ptvService ?? PtvRealtimeService();
   bool _isLoading = true;
   List<Map<String, dynamic>> _stopsSequence = [];
   List<ServiceStop> _serviceStops = [];
@@ -133,7 +134,27 @@ class _TripDetailsSheetState extends State<TripDetailsSheet> {
     }
   }
 
+  List<Map<String, dynamic>>? _displayCache;
+  List<Map<String, dynamic>>? _displayCacheSource;
+  Station? _displayCacheStation;
+
+  /// The stop list trimmed to start at the selected station. Read many times
+  /// per build, so it is cached against the identity of its inputs.
   List<Map<String, dynamic>> get _displayStopsSequence {
+    final cached = _displayCache;
+    if (cached != null &&
+        identical(_displayCacheSource, _stopsSequence) &&
+        identical(_displayCacheStation, widget.selectedStation)) {
+      return cached;
+    }
+    final result = _computeDisplayStops();
+    _displayCache = result;
+    _displayCacheSource = _stopsSequence;
+    _displayCacheStation = widget.selectedStation;
+    return result;
+  }
+
+  List<Map<String, dynamic>> _computeDisplayStops() {
     if (_stopsSequence.isEmpty) return [];
 
     final selId = widget.selectedStation.id;

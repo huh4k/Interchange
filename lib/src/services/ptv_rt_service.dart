@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:http/http.dart' as http;
 import '../core/heavy_work.dart';
+import '../core/http_client_factory.dart';
 import '../domain/entities/service.dart';
 import '../domain/entities/transit_route.dart';
 import '../domain/entities/station.dart';
@@ -56,8 +58,70 @@ class EnvService {
   }
 }
 
+/// Parses a PTV `/v3/departures` response body into trips departing between
+/// two minutes ago and one hour after [nowMillis], sorted chronologically.
+///
+/// Top-level so it can run on a background isolate.
+List<Trip> parsePtvDeparturesBody(String body, int nowMillis) {
+  final data = json.decode(body) as Map<String, dynamic>;
+  final deps = data['departures'] as List?;
+  final runs = data['runs'] as Map<String, dynamic>?;
+  final routes = data['routes'] as Map<String, dynamic>?;
+
+  if (deps == null || runs == null || routes == null) return [];
+
+  final now = DateTime.fromMillisecondsSinceEpoch(nowMillis);
+  final windowStart = now.subtract(const Duration(minutes: 2));
+  final windowEnd = now.add(const Duration(hours: 1));
+  final trips = <Trip>[];
+
+  for (final d in deps) {
+    if (d is! Map<String, dynamic>) continue;
+    final runRef = d['run_ref']?.toString() ?? '';
+    final routeId = d['route_id']?.toString() ?? '';
+
+    final run = runs[runRef] as Map<String, dynamic>?;
+    final route = routes[routeId] as Map<String, dynamic>?;
+    if (run == null || route == null) continue;
+
+    // Cheap pre-filter on the same time Trip.fromPtvDeparture will use
+    // (estimated, else scheduled) so out-of-window departures never become Trips.
+    final est = DateTime.tryParse(d['estimated_departure_utc']?.toString() ?? '');
+    final sch = DateTime.tryParse(d['scheduled_departure_utc']?.toString() ?? '');
+    final t = est ?? sch;
+    if (t != null && (!t.isAfter(windowStart) || !t.isBefore(windowEnd))) continue;
+
+    final trip = Trip.fromPtvDeparture(d, run, route);
+    final sched = trip.departure?.scheduledTime;
+    // Filter departures from current time (now - 2m) to 1 hour from now
+    if (sched != null && sched.isAfter(windowStart) && sched.isBefore(windowEnd)) {
+      trips.add(trip);
+    }
+  }
+
+  // Departures are sorted chronologically by departure time (next arriving vehicle first)
+  trips.sort((a, b) {
+    final aTime = a.departure?.scheduledTime ?? now;
+    final bTime = b.departure?.scheduledTime ?? now;
+    final timeComparison = aTime.compareTo(bTime);
+    if (timeComparison != 0) return timeComparison;
+
+    final aLine = a.departure?.lineCode.isNotEmpty == true
+        ? a.departure!.lineCode
+        : a.destinationName;
+    final bLine = b.departure?.lineCode.isNotEmpty == true
+        ? b.departure!.lineCode
+        : b.destinationName;
+    return aLine.toLowerCase().compareTo(bLine.toLowerCase());
+  });
+
+  return trips;
+}
+
 class PtvRealtimeService {
   final http.Client _client;
+  final Duration _responseTimeout;
+  final Duration _idleTimeout;
   final Map<String, String> _resolvedStopIdCache = {};
 
   static final RegExp _numericStopIdRegex = RegExp(r'^\d{3,5}$');
@@ -65,6 +129,21 @@ class PtvRealtimeService {
   /// Disruptions change slowly; reuse a recent result across refresh cycles.
   static const Duration _disruptionsTtl = Duration(seconds: 60);
   List<ServiceAlert>? _cachedDisruptions;
+  Future<List<ServiceAlert>>? _disruptionsInFlight;
+
+  /// Only metro train (0), tram (1) and V/Line (3) disruptions are requested:
+  /// the unfiltered feed is ~260 KB, mostly buses, versus ~70 KB filtered.
+  static const String _disruptionsPath =
+      '/v3/disruptions?route_types=0&route_types=1&route_types=3';
+
+  /// Disruption buckets the app shows: metro train/tram, V/Line and network-wide
+  /// notices. Bus, coach, ferry and similar buckets are skipped.
+  static const Set<String> _relevantDisruptionModes = {
+    'metro_train',
+    'metro_tram',
+    'regional_train',
+    'general',
+  };
   DateTime? _disruptionsFetchedAt;
 
   static const Map<String, String> _defaultHeaders = {
@@ -72,7 +151,45 @@ class PtvRealtimeService {
     'User-Agent': 'Mozilla/5.0 (Linux; Android) TransitApp/1.0',
   };
 
-  PtvRealtimeService({http.Client? client}) : _client = client ?? http.Client();
+  /// [responseTimeout] bounds the wait for response headers; [idleTimeout]
+  /// bounds the gap between body chunks. There is deliberately no total
+  /// timeout so large bodies on slow links can still complete.
+  PtvRealtimeService({
+    http.Client? client,
+    this._responseTimeout = const Duration(seconds: 15),
+    this._idleTimeout = const Duration(seconds: 15),
+  }) : _client = client ?? createAppHttpClient();
+
+  /// GET [signedUrl] with a response-header timeout and a per-chunk idle
+  /// timeout. Equivalent to `Client.get` + `Response.fromStream` otherwise.
+  Future<http.Response> _get(String signedUrl) async {
+    try {
+      return await _getOnce(signedUrl);
+    } on TimeoutException {
+      rethrow;
+    } catch (_) {
+      // GETs are idempotent. A kept-alive connection the server has already
+      // closed fails on first use; one retry opens a fresh connection.
+      return _getOnce(signedUrl);
+    }
+  }
+
+  Future<http.Response> _getOnce(String signedUrl) async {
+    final request = http.Request('GET', Uri.parse(signedUrl))
+      ..headers.addAll(_defaultHeaders);
+    final streamed = await _client.send(request).timeout(_responseTimeout);
+    final bytes =
+        await http.ByteStream(streamed.stream.timeout(_idleTimeout)).toBytes();
+    return http.Response.bytes(
+      bytes,
+      streamed.statusCode,
+      request: streamed.request,
+      headers: streamed.headers,
+      isRedirect: streamed.isRedirect,
+      persistentConnection: streamed.persistentConnection,
+      reasonPhrase: streamed.reasonPhrase,
+    );
+  }
 
   static String generateSignedUrl(String requestPath) {
     final devId = EnvService.userId;
@@ -88,13 +205,39 @@ class PtvRealtimeService {
     return '${EnvService.baseUrl}$uriWithDevId&signature=$signature';
   }
 
+  static String _resolverCleanName(Station station) => station.name
+      .toLowerCase()
+      .replaceAll(' railway station', '')
+      .replaceAll(' station', '')
+      .trim();
+
+  /// Whether [stopId] is already a valid PTV API stop id for [routeType], so no
+  /// search request is needed to resolve it.
+  ///
+  /// For tram stops (routeType 1), valid PTV stop IDs are in the 2001-3500 range.
+  /// The 19xx/20xx/22xx rejection is only for metro train GTFS platform IDs.
+  static bool isDirectStopId(String stopId, int routeType) {
+    if (!_numericStopIdRegex.hasMatch(stopId)) return false;
+    final idInt = int.tryParse(stopId) ?? 0;
+    if (routeType == 1) {
+      return idInt >= 2001 && idInt <= 3500;
+    }
+    return !stopId.startsWith('19') &&
+        !stopId.startsWith('20') &&
+        !stopId.startsWith('22');
+  }
+
+  /// Network-free lookup of the stop id [resolveStopIdForStation] would return
+  /// without a search request, or null when a request would be needed.
+  String? peekResolvedStopId(Station station, {int routeType = 0}) {
+    final hit = _resolvedStopIdCache['$routeType:${_resolverCleanName(station)}'];
+    if (hit != null) return hit;
+    return isDirectStopId(station.stopId, routeType) ? station.stopId : null;
+  }
+
   /// Dynamically resolves the official PTV API v3 numeric stop ID for a given station.
   Future<String> resolveStopIdForStation(Station station, {int routeType = 0}) async {
-    final cleanName = station.name
-        .toLowerCase()
-        .replaceAll(' railway station', '')
-        .replaceAll(' station', '')
-        .trim();
+    final cleanName = _resolverCleanName(station);
 
     // Cache key includes routeType to prevent train/tram ID collisions for stations
     // sharing a name (e.g. "Flinders Street" is stop 1071 for trains, 2722 for trams)
@@ -107,22 +250,9 @@ class PtvRealtimeService {
     // For tram stops (routeType 1), valid PTV stop IDs are in the 2001-3418 range.
     // Do NOT apply the 19xx/20xx/22xx rejection that was intended only for metro train
     // GTFS internal platform IDs. For trains (routeType 0), keep the existing guard.
-    if (_numericStopIdRegex.hasMatch(station.stopId)) {
-      final idInt = int.tryParse(station.stopId) ?? 0;
-      bool isValidForMode;
-      if (routeType == 1) {
-        // Tram: all 3-5 digit IDs in the 2001-3500 range are valid PTV API stop IDs
-        isValidForMode = idInt >= 2001 && idInt <= 3500;
-      } else {
-        // Train: reject IDs that look like GTFS internal platform IDs (19xx, 20xx, 22xx prefix)
-        isValidForMode = !station.stopId.startsWith('19') &&
-            !station.stopId.startsWith('20') &&
-            !station.stopId.startsWith('22');
-      }
-      if (isValidForMode) {
-        _resolvedStopIdCache[cacheKey] = station.stopId;
-        return station.stopId;
-      }
+    if (isDirectStopId(station.stopId, routeType)) {
+      _resolvedStopIdCache[cacheKey] = station.stopId;
+      return station.stopId;
     }
 
     if (!EnvService.isConfigured) return station.stopId;
@@ -183,12 +313,25 @@ class PtvRealtimeService {
       return cached;
     }
 
-    final signedUrl = generateSignedUrl('/v3/disruptions');
+    // Share one download between concurrent callers.
+    final inFlight = _disruptionsInFlight;
+    if (inFlight != null) return inFlight;
+
+    final download = _downloadDisruptions();
+    _disruptionsInFlight = download;
     try {
-      final response = await _client.get(
-        Uri.parse(signedUrl),
-        headers: _defaultHeaders,
-      );
+      return await download;
+    } finally {
+      if (identical(_disruptionsInFlight, download)) {
+        _disruptionsInFlight = null;
+      }
+    }
+  }
+
+  Future<List<ServiceAlert>> _downloadDisruptions() async {
+    final signedUrl = generateSignedUrl(_disruptionsPath);
+    try {
+      final response = await _get(signedUrl);
       if (response.statusCode != 200) return [];
 
       final body = response.body;
@@ -201,6 +344,7 @@ class PtvRealtimeService {
 
       final alerts = <ServiceAlert>[];
       disruptionsObj.forEach((modeKey, list) {
+        if (!_relevantDisruptionModes.contains(modeKey)) return;
         if (list is List) {
           for (final item in list) {
             if (item is Map<String, dynamic>) {
@@ -245,10 +389,7 @@ class PtvRealtimeService {
     final signedUrl = generateSignedUrl('/v3/search/$encodedQuery?route_types=$routeType');
 
     try {
-      final response = await _client.get(
-        Uri.parse(signedUrl),
-        headers: _defaultHeaders,
-      );
+      final response = await _get(signedUrl);
       if (response.statusCode != 200) return [];
 
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -273,7 +414,7 @@ class PtvRealtimeService {
   Future<List<Trip>> fetchDepartures(
     String stopId, {
     int routeType = 0,
-    int maxResults = 30,
+    int maxResults = 20,
     Station? station,
   }) async {
     if (!EnvService.isConfigured) return [];
@@ -301,78 +442,31 @@ class PtvRealtimeService {
     );
 
     try {
-      final response = await _client.get(
-        Uri.parse(signedUrl),
-        headers: _defaultHeaders,
-      );
+      final response = await _get(signedUrl);
       if (response.statusCode != 200) return [];
 
-      final data = json.decode(response.body) as Map<String, dynamic>;
-      final deps = data['departures'] as List?;
-      final runs = data['runs'] as Map<String, dynamic>?;
-      final routes = data['routes'] as Map<String, dynamic>?;
-
-      if (deps == null || runs == null || routes == null) return [];
-
-      final now = DateTime.now();
-      final oneHourFromNow = now.add(const Duration(hours: 1));
-      final trips = <Trip>[];
-
-      for (final d in deps) {
-        if (d is Map<String, dynamic>) {
-          final runRef = d['run_ref']?.toString() ?? '';
-          final routeId = d['route_id']?.toString() ?? '';
-
-          final run = runs[runRef] as Map<String, dynamic>?;
-          final route = routes[routeId] as Map<String, dynamic>?;
-
-          if (run != null && route != null) {
-            final trip = Trip.fromPtvDeparture(d, run, route);
-            final sched = trip.departure?.scheduledTime;
-            // Filter departures from current time (now - 2m) to 1 hour from now
-            if (sched != null &&
-                sched.isAfter(now.subtract(const Duration(minutes: 2))) &&
-                sched.isBefore(oneHourFromNow)) {
-              trips.add(trip);
-            }
-          }
-        }
-      }
-
-      // Departures are sorted chronologically by departure time (next arriving vehicle first)
-      trips.sort((a, b) {
-        final aTime = a.departure?.scheduledTime ?? now;
-        final bTime = b.departure?.scheduledTime ?? now;
-        final timeComparison = aTime.compareTo(bTime);
-        if (timeComparison != 0) return timeComparison;
-
-        final aLine = a.departure?.lineCode.isNotEmpty == true
-            ? a.departure!.lineCode
-            : a.destinationName;
-        final bLine = b.departure?.lineCode.isNotEmpty == true
-            ? b.departure!.lineCode
-            : b.destinationName;
-        return aLine.toLowerCase().compareTo(bLine.toLowerCase());
-      });
-
-      return trips;
+      return await _decodeDepartures(response.body);
     } catch (_) {
       return [];
     }
+  }
+
+  /// Decodes and filters a departures body, off the UI isolate for big bodies.
+  /// Static so the isolate closure cannot capture `this` (and its HTTP client).
+  static Future<List<Trip>> _decodeDepartures(String body) {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    return runHeavy(body.length, () => parsePtvDeparturesBody(body, nowMs));
   }
 
   Future<Map<String, dynamic>?> fetchPattern(String runRef, int routeType) async {
     if (!EnvService.isConfigured) return null;
 
     final signedUrl = generateSignedUrl(
-      '/v3/pattern/run/$runRef/route_type/$routeType?expand=all',
+      '/v3/pattern/run/$runRef/route_type/$routeType?expand=Stop',
     );
 
     try {
-      final response = await _client.get(
-        Uri.parse(signedUrl),
-        headers: _defaultHeaders,
-      );
+      final response = await _get(signedUrl);
       if (response.statusCode != 200) return null;
       return json.decode(response.body) as Map<String, dynamic>;
     } catch (_) {

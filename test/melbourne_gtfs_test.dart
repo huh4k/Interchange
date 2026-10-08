@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
@@ -179,6 +180,94 @@ void main() {
         ),
         throwsA(isA<GtfsNetworkException>()),
       );
+    });
+
+    const timeoutCsv = '''stop_id,stop_name,stop_lat,stop_lon,stop_url,location_type,parent_station,wheelchair_boarding,level_id,platform_code
+"11212","Flinders Street Station","-37.81809481","144.96626579","https://transport.vic.gov.au/stop/1071/?utm_source=open_data_click_stop","","vic:rail:FSS","1","Level 0","1"
+''';
+
+    test('Stalled response headers fall back to the cached stations', () async {
+      final tempDir = Directory.systemTemp.createTempSync('stops_stall_cached_');
+      final tempFile = File('${tempDir.path}/stops.txt');
+      await tempFile.writeAsString(timeoutCsv);
+      final mockClient = _MockHttpClient((request) => Completer<http.StreamedResponse>().future);
+
+      final stations = await MelbourneGtfsService.loadOrDownloadStops(
+        localFile: tempFile,
+        client: mockClient,
+        responseTimeout: const Duration(milliseconds: 50),
+      );
+      expect(stations.any((s) => s.name == 'Flinders Street Station'), isTrue);
+    });
+
+    test('Stalled response headers without a cache throw GtfsNetworkException', () async {
+      final tempDir = Directory.systemTemp.createTempSync('stops_stall_clean_');
+      final tempFile = File('${tempDir.path}/stops.txt');
+      final mockClient = _MockHttpClient((request) => Completer<http.StreamedResponse>().future);
+
+      await expectLater(
+        MelbourneGtfsService.loadOrDownloadStops(
+          localFile: tempFile,
+          client: mockClient,
+          responseTimeout: const Duration(milliseconds: 50),
+        ),
+        throwsA(isA<GtfsNetworkException>()),
+      );
+    });
+
+    test('Stalled body stream falls back to cache and leaves no tmp file', () async {
+      final tempDir = Directory.systemTemp.createTempSync('stops_stall_body_');
+      final tempFile = File('${tempDir.path}/stops.txt');
+      await tempFile.writeAsString(timeoutCsv);
+      final controller = StreamController<List<int>>();
+      addTearDown(controller.close);
+      controller.add(utf8.encode('stop_id,stop_name\n'));
+      final mockClient = _MockHttpClient(
+        (request) async => http.StreamedResponse(controller.stream, 200),
+      );
+
+      final stations = await MelbourneGtfsService.loadOrDownloadStops(
+        localFile: tempFile,
+        client: mockClient,
+        forceRefresh: true,
+        idleTimeout: const Duration(milliseconds: 50),
+      );
+      expect(stations.any((s) => s.name == 'Flinders Street Station'), isTrue);
+      expect(File('${tempFile.path}.tmp').existsSync(), isFalse);
+    });
+
+    test('A fresh stops.txt download invalidates stale binary and in-memory indexes', () async {
+      const header = 'stop_id,stop_name,stop_lat,stop_lon,stop_url,location_type,parent_station,wheelchair_boarding,level_id,platform_code';
+      const csvOld = '$header\n"11212","Flinders Street Station","-37.81809481","144.96626579","https://transport.vic.gov.au/stop/1071/","","vic:rail:FSS","1","Level 0","1"\n';
+      const csvNew = '$header\n"11300","Richmond Station","-37.82400000","144.99000000","https://transport.vic.gov.au/stop/1162/","","vic:rail:RMD","1","Level 0","1"\n';
+
+      final tempDir = Directory.systemTemp.createTempSync('stops_invalidate_');
+      final tempFile = File('${tempDir.path}/stops.txt');
+      await tempFile.writeAsString(csvOld);
+      // Builds stops_index.bin and fills the in-memory index.
+      final oldIndex = await GtfsIndexEngine.getOrCreateIndex(tempDir);
+      expect(oldIndex.stops.values.any((s) => s.name.contains('Flinders')), isTrue);
+      expect(File('${tempDir.path}/${GtfsIndexEngine.binaryIndexFilename}').existsSync(), isTrue);
+
+      final downloaded = await MelbourneGtfsService.loadOrDownloadStops(
+        localFile: tempFile,
+        forceRefresh: true,
+        client: _MockHttpClient((request) async => http.StreamedResponse(
+              Stream.value(utf8.encode(csvNew)),
+              200,
+              headers: {'etag': '"v2"'},
+            )),
+      );
+      expect(downloaded.single.name, 'Richmond Station');
+
+      // A later 304 serves the cache; it must reflect the new download.
+      final cached = await MelbourneGtfsService.loadOrDownloadStops(
+        localFile: tempFile,
+        client: _MockHttpClient((request) async => http.StreamedResponse(const Stream.empty(), 304)),
+      );
+      expect(cached.map((s) => s.name), ['Richmond Station']);
+      final reindexed = await GtfsIndexEngine.getOrCreateIndex(tempDir);
+      expect(reindexed.stops.values.any((s) => s.name.contains('Flinders')), isFalse);
     });
 
     test('Falls back to local cache when network fails but cache exists', () async {

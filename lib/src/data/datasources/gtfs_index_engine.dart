@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:path/path.dart' as p;
+import '../../core/gtfs_csv.dart';
 import '../../core/heavy_work.dart';
 import '../../domain/entities/station.dart';
 
@@ -17,6 +18,10 @@ class GtfsIndexCache {
 
 class GtfsIndexEngine {
   static final Map<String, GtfsIndexCache> _indexCache = {};
+
+  /// Drops the in-memory index for [dirPath] so the next lookup rebuilds it
+  /// (used after stops.txt is replaced by a fresh download).
+  static void invalidate(String dirPath) => _indexCache.remove(dirPath);
 
   static final RegExp _newlineRegex = RegExp(r'\r?\n');
   static final RegExp _whitespaceRegex = RegExp(r'\s+');
@@ -329,7 +334,7 @@ class GtfsIndexEngine {
     }
 
 
-    final headerCols = _parseCsvRow(lines.first.replaceAll('\uFEFF', ''));
+    final headerCols = parseGtfsCsvRow(lines.first.replaceAll('\uFEFF', ''));
     final stopIdIdx = headerCols.indexOf('stop_id');
     final stopNameIdx = headerCols.indexOf('stop_name');
     final stopLatIdx = headerCols.indexOf('stop_lat');
@@ -346,7 +351,7 @@ class GtfsIndexEngine {
       final line = lines[i].trim();
       if (line.isEmpty) continue;
 
-      final cols = _parseCsvRow(line);
+      final cols = parseGtfsCsvRow(line);
       if (stopIdIdx == -1 || cols.length <= stopIdIdx) continue;
 
       final rawStopId = cols[stopIdIdx];
@@ -438,23 +443,4 @@ class GtfsIndexEngine {
   }
 
 
-  static List<String> _parseCsvRow(String line) {
-    final values = <String>[];
-    final buffer = StringBuffer();
-    bool inQuotes = false;
-
-    for (int i = 0; i < line.length; i++) {
-      final char = line[i];
-      if (char == '"') {
-        inQuotes = !inQuotes;
-      } else if (char == ',' && !inQuotes) {
-        values.add(buffer.toString().trim().replaceAll('"', ''));
-        buffer.clear();
-      } else {
-        buffer.write(char);
-      }
-    }
-    values.add(buffer.toString().trim().replaceAll('"', ''));
-    return values;
-  }
 }

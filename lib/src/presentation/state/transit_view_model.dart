@@ -58,6 +58,12 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
   int _loadRequestId = 0;
   bool _isSilentRefreshing = false;
 
+  /// Data younger than this is not refetched when the app resumes.
+  static const Duration _resumeRefreshThreshold = Duration(seconds: 15);
+  final DateTime Function() _clock;
+  DateTime? _lastRefreshAt;
+  StreamSubscription<Position>? _positionSub;
+
   // Memoised derived lists. Widgets read these getters on every rebuild, so the
   // results are recomputed only when their inputs change.
   int _favoriteTripsVersion = 0;
@@ -72,7 +78,9 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
   int? _disruptionsCacheFavVersion;
   String? _disruptionsCacheStation;
   bool _isRefreshingConnections = false;
-  PtvMode? _stationsLoadedForMode;
+  /// Station lists already loaded per mode. Lists are never mutated in place:
+  /// identity-based memoisation elsewhere depends on that.
+  final Map<PtvMode, List<Station>> _stationsByMode = {};
   late final Future<void> initFuture;
 
   TransitViewModel({
@@ -80,13 +88,17 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     PtvRealtimeService? ptvService,
     LocationService? locationService,
     ConnectionAdvisorService? connectionAdvisor,
-  })  : ptvService = ptvService ?? PtvRealtimeService(),
-        locationService = locationService ?? LocationService(),
-        connectionAdvisor = connectionAdvisor ??
-            ConnectionAdvisorService(
-              ptvService: ptvService ?? PtvRealtimeService(),
-              repository: repository,
-            ) {
+    DateTime Function()? clock,
+  })  : _clock = clock ?? DateTime.now,
+        ptvService = ptvService ?? PtvRealtimeService(),
+        locationService = locationService ?? LocationService() {
+    // Built here (not in the initializer list) so the advisor shares this
+    // view model's PtvRealtimeService, including its caches and connection.
+    this.connectionAdvisor = connectionAdvisor ??
+        ConnectionAdvisorService(
+          ptvService: this.ptvService,
+          repository: repository,
+        );
     WidgetsBinding.instance.addObserver(this);
     initFuture = _init();
     _startAutoRefresh();
@@ -116,6 +128,9 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     _isDisposed = true;
     _autoRefreshTimer?.cancel();
     _trackingPollingTimer?.cancel();
+    _positionSub?.cancel();
+    _positionSub = null;
+    if (_isTrackingActive) locationService.stopLocationTracking();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -123,37 +138,88 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
   /// Starts a 30-second periodic timer that re-fetches departure data.
   void _startAutoRefresh() {
     _autoRefreshTimer?.cancel();
-    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (!_isDisposed && !_isLoading && !_isSilentRefreshing) {
-        loadData(station: _selectedStation, isSilent: true);
-      }
-    });
+    _autoRefreshTimer = _newAutoRefreshTimer();
   }
+
+  Timer _newAutoRefreshTimer() => Timer.periodic(const Duration(seconds: 30), (_) {
+        if (!_isDisposed && !_isLoading && !_isSilentRefreshing) {
+          loadData(station: _selectedStation, isSilent: true);
+        }
+      });
 
   /// Pauses or resumes the auto-refresh timer based on the app lifecycle.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      _startAutoRefresh();
-      // Data may be stale after time in the background; refresh straight away.
-      if (!_isLoading && !_isSilentRefreshing) {
-        loadData(station: _selectedStation, isSilent: true);
-      }
-      if (_isTrackingActive) _startTrackingPolling();
-    } else if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.inactive) {
-      _autoRefreshTimer?.cancel();
-      _autoRefreshTimer = null;
-      _stopTrackingPolling();
+    switch (state) {
+      case AppLifecycleState.resumed:
+        // Restart only timers that were stopped while in the background.
+        _autoRefreshTimer ??= _newAutoRefreshTimer();
+        if (_isTrackingActive && _trackingPollingTimer == null) {
+          _startTrackingPolling();
+        }
+        // Skip the refetch for brief inactive->resumed blips (permission
+        // dialogs, notification shade) when the data is still fresh.
+        final last = _lastRefreshAt;
+        final fresh =
+            last != null && _clock().difference(last) < _resumeRefreshThreshold;
+        if (!fresh && !_isLoading && !_isSilentRefreshing) {
+          loadData(station: _selectedStation, isSilent: true);
+        }
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.paused:
+        _autoRefreshTimer?.cancel();
+        _autoRefreshTimer = null;
+        _stopTrackingPolling();
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.detached:
+        break;
+    }
+  }
+
+  /// Connections are only displayed in the Live Ride sheet, so poll quickly
+  /// while it is open and slowly (just to keep data warm) while it is closed.
+  static const Duration _visiblePollInterval = Duration(seconds: 20);
+  static const Duration _hiddenPollInterval = Duration(seconds: 90);
+
+  int _liveRideViewers = 0;
+  DateTime? _connectionsRefreshedAt;
+  bool get _liveRideVisible => _liveRideViewers > 0;
+
+  /// Called by the Live Ride sheet when it mounts.
+  void liveRideSheetOpened() {
+    if (_isDisposed) return;
+    _liveRideViewers++;
+    if (_liveRideViewers != 1) return;
+    if (_isTrackingActive && _trackingPollingTimer != null) {
+      _startTrackingPolling();
+    }
+    final refreshedAt = _connectionsRefreshedAt;
+    if (_isTrackingActive &&
+        (refreshedAt == null ||
+            DateTime.now().difference(refreshedAt) > _visiblePollInterval)) {
+      // Never refresh synchronously: the sheet builds inside a ListenableBuilder.
+      Future.microtask(() {
+        if (!_isDisposed) refreshUpcomingConnections();
+      });
+    }
+  }
+
+  /// Called by the Live Ride sheet when it is disposed.
+  void liveRideSheetClosed() {
+    if (_isDisposed || _liveRideViewers == 0) return;
+    _liveRideViewers--;
+    if (_liveRideViewers == 0 && _isTrackingActive && _trackingPollingTimer != null) {
+      _startTrackingPolling();
     }
   }
 
   /// Starts periodic polling for upcoming connections while tracking a trip.
   void _startTrackingPolling() {
     _trackingPollingTimer?.cancel();
-    _trackingPollingTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+    final interval = _liveRideVisible ? _visiblePollInterval : _hiddenPollInterval;
+    _trackingPollingTimer = Timer.periodic(interval, (_) {
       if (!_isDisposed && _isTrackingActive) {
-        refreshUpcomingConnections();
+        refreshUpcomingConnections(showSpinner: false);
       }
     });
   }
@@ -217,6 +283,11 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
   List<Station> get favoriteStations => _favoriteStations;
   List<Station> get recentStations => _recentStations;
   Set<String> get favoriteTrips => _favoriteTrips;
+
+  /// Bumped on every favourites change; lets widgets select on a cheap value
+  /// (the favourites collections are mutated in place).
+  int get favoriteStationsVersion => _favoriteStationsVersion;
+  int get favoriteTripsVersion => _favoriteTripsVersion;
   Position? get userPosition => _userPosition;
   bool get isLocating => _isLocating;
   bool get isLoading => _isLoading;
@@ -275,12 +346,23 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
 
     notifyListeners();
 
-    await locationService.startLocationTracking(
-      onPositionChanged: handlePositionUpdate,
-    );
+    // Don't block the first connections refresh on the (possibly interactive)
+    // location-permission flow.
+    // Single delivery path: the stream feeds handlePositionUpdate once per fix
+    // whether or not the Live Ride sheet is open.
+    _positionSub ??= locationService.positionStream.listen(handlePositionUpdate);
+    final locationFuture = locationService.startLocationTracking();
 
     await refreshUpcomingConnections();
-    _startTrackingPolling();
+    if (_isTrackingActive) _startTrackingPolling();
+
+    await locationFuture;
+    if (!_isTrackingActive) {
+      // Tracking ended while the location service was still starting.
+      _positionSub?.cancel();
+      _positionSub = null;
+      await locationService.stopLocationTracking();
+    }
   }
 
   void stopTracking() {
@@ -290,24 +372,44 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     _previousStopStation = null;
     _nextStopStation = null;
     _upcomingConnections = {};
+    _connectionsRefreshedAt = null;
     _stopTrackingPolling();
+    _positionSub?.cancel();
+    _positionSub = null;
     locationService.stopLocationTracking();
     notifyListeners();
   }
 
-  Future<void> refreshUpcomingConnections() async {
-    if (_activeTrackedTrip == null || _isRefreshingConnections) return;
+  /// Recomputes connecting services for the tracked trip. Background polls pass
+  /// [showSpinner] false so the sheet doesn't flash a spinner every cycle.
+  Future<void> refreshUpcomingConnections({bool showSpinner = true}) async {
+    if (_activeTrackedTrip == null) return;
+    if (_isRefreshingConnections) {
+      // A poll is already running: reflect it in the UI for a manual refresh.
+      if (showSpinner && !_isLoadingConnections) {
+        _isLoadingConnections = true;
+        notifyListeners();
+      }
+      return;
+    }
     _isRefreshingConnections = true;
-    _isLoadingConnections = true;
-    notifyListeners();
+    if (showSpinner) {
+      _isLoadingConnections = true;
+      notifyListeners();
+    }
 
+    final trackedTrip = _activeTrackedTrip!;
     try {
       final connections = await connectionAdvisor.computeUpcomingConnections(
-        activeTrip: _activeTrackedTrip!,
+        activeTrip: trackedTrip,
         currentOrNextStation: _nextStopStation ?? _onBoardStation ?? _selectedStation,
         allStations: _stations,
       );
-      _upcomingConnections = connections;
+      // Ignore a result that arrives after tracking ended or switched trips.
+      if (identical(_activeTrackedTrip, trackedTrip)) {
+        _upcomingConnections = connections;
+        _connectionsRefreshedAt = DateTime.now();
+      }
     } catch (_) {
       // Keep existing
     } finally {
@@ -344,6 +446,9 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     }
 
     if (closestStation != null) {
+      final oldOn = _onBoardStation;
+      final oldPrev = _previousStopStation;
+      final oldNext = _nextStopStation;
       final stops = _activeTrackedTrip!.stops;
       final curIdx = stops.indexWhere((s) =>
           s.station.id == closestStation!.id ||
@@ -357,7 +462,13 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
       } else {
         _onBoardStation = closestStation;
       }
-      notifyListeners();
+      // GPS fixes arrive constantly but the stop only changes every few
+      // minutes; avoid rebuilding listeners when nothing visible moved.
+      if (!identical(oldOn, _onBoardStation) ||
+          !identical(oldPrev, _previousStopStation) ||
+          !identical(oldNext, _nextStopStation)) {
+        notifyListeners();
+      }
     }
   }
 
@@ -379,7 +490,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     _trips = [];
     _searchQuery = '';
     notifyListeners();
-    loadData(station: _selectedStation);
+    loadData(station: _selectedStation, reuseStations: true);
   }
   void selectNavIndex(int index) {
     if (_selectedNavIndex != index) {
@@ -397,7 +508,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     _selectedStation = station;
     _saveRecent(station);
     notifyListeners();
-    loadData(station: station);
+    loadData(station: station, reuseStations: true);
   }
 
   /// Fetches departures for a given interchange [station] **without** changing
@@ -446,7 +557,8 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     } catch (_) {}
   }
 
-  /// Locates the device GPS coordinates and selects the closest Melbourne station.
+  /// Locates the device and returns the closest station; callers are
+  /// responsible for selecting it.
   Future<Station?> locateNearestStation() async {
     _isLocating = true;
     notifyListeners();
@@ -460,10 +572,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
           _stations,
           maxDistanceMeters: 100000,
         );
-        if (nearest != null) {
-          selectStation(nearest);
-          return nearest;
-        }
+        if (nearest != null) return nearest;
       }
     } catch (_) {
     } finally {
@@ -515,7 +624,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
   void resetFilters() {
     _searchQuery = '';
     notifyListeners();
-    loadData(station: _selectedStation);
+    loadData(station: _selectedStation, reuseStations: true);
   }
 
   Future<void> toggleFavoriteTrip(String tripId) async {
@@ -526,8 +635,8 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     } else {
       _favoriteTrips.add(tripId);
     }
-    await favoriteService.saveFavoriteTrips(_favoriteTrips);
     notifyListeners();
+    await favoriteService.saveFavoriteTrips(Set.of(_favoriteTrips));
   }
 
   bool isFavoriteTrip(String tripId) => _favoriteTrips.contains(tripId);
@@ -540,8 +649,8 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     } else {
       _favoriteStations.add(station);
     }
-    await favoriteService.saveFavorites(_favoriteStations);
     notifyListeners();
+    await favoriteService.saveFavorites(List.of(_favoriteStations));
   }
 
   bool isFavoriteStation(Station station) =>
@@ -588,13 +697,48 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     return result;
   }
 
-  Future<void> loadData({PtvMode? mode, Station? station, bool isSilent = false}) async {
+  /// Loads departures (and stations/alerts) for [station] in the active mode.
+  ///
+  /// Silent refreshes and loads with [reuseStations] set reuse the station list
+  /// already loaded for the mode instead of re-checking stops.txt.
+  Future<void>? _initialLoad;
+
+  // Alerts load alongside departures but are applied after them, so the list
+  // appears without waiting for the (larger) disruptions feed.
+  int _alertLoadsInFlight = 0;
+
+  static bool _sameAlerts(List<ServiceAlert> a, List<ServiceAlert> b) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].id != b[i].id ||
+          a[i].title != b[i].title ||
+          a[i].description != b[i].description) {
+        return false;
+      }
+    }
+    return true;
+  }
+  bool get isLoadingAlerts => _alertLoadsInFlight > 0;
+
+  /// Starts the first data load once; later calls return the same future.
+  /// main() calls this before the first frame so loading overlaps theme and UI
+  /// startup, and HomeScreen calls it again harmlessly.
+  Future<void> ensureInitialLoad() => _initialLoad ??= loadData();
+
+  Future<void> loadData({
+    PtvMode? mode,
+    Station? station,
+    bool isSilent = false,
+    bool reuseStations = false,
+  }) async {
     final requestId = ++_loadRequestId;
     if (isSilent) _isSilentRefreshing = true;
     if (mode != null) {
       _activeMode = mode;
     }
     if (!isSilent) {
+      _lastRefreshAt = null;
       _isLoading = true;
       _loadingProgress = 0.05;
       _loadingStatus = 'Downloading ${_activeMode == PtvMode.metroTram ? 'Tram' : 'Metro Train'} Timetable: 5%';
@@ -615,45 +759,18 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
       }
     }
 
+    var alertLoadHeld = false;
+    bool releaseAlertLoad() {
+      if (!alertLoadHeld) return false;
+      alertLoadHeld = false;
+      _alertLoadsInFlight--;
+      return true;
+    }
+
     try {
-      // 1. Load GTFS Stations for the active mode from remote-streamed stops.txt
-      // Silent refreshes reuse the station list already loaded for this mode.
-      final canReuseStations =
-          isSilent && _stationsLoadedForMode == _activeMode;
-      final dynamicStops = canReuseStations
-          ? _stations
-          : await repository.getStopsForMode(
-              _activeMode,
-              onProgress: updateProgress,
-            );
-      if (!canReuseStations && dynamicStops.isNotEmpty) {
-        _stationsLoadedForMode = _activeMode;
-      }
+      final routeType = _activeMode.ptvRouteType; // 0 = Trains, 1 = Trams
 
-      final stationList = dynamicStops.isNotEmpty
-          ? dynamicStops
-          : [MelbourneGtfsService.defaultStationForMode(_activeMode)];
-
-      final requestedStation = station ?? _selectedStation;
-      final reqNameClean = requestedStation.normalizedName;
-      final currentSelected = stationList.firstWhere(
-        (s) =>
-            (requestedStation.stopId.isNotEmpty && s.stopId == requestedStation.stopId) ||
-            (requestedStation.id.isNotEmpty && s.id == requestedStation.id) ||
-            s.normalizedName == reqNameClean,
-        orElse: () => requestedStation,
-      );
-
-      // Immediately register the full station list so station selector/search is populated
-      if (requestId == _loadRequestId && !_isDisposed) {
-        _stations = stationList;
-        _selectedStation = currentSelected;
-        notifyListeners();
-      }
-
-      // 2. Fetch Live Realtime Departures (Next 1 hour window) and Disruptions directly from PTV API
-      updateProgress(0.60, 'Fetching Live Realtime Departures: 60%');
-      // Disruptions and departures are independent, so fetch them concurrently.
+      // Disruptions are independent of the station, so start them straight away.
       Future<List<ServiceAlert>> loadAlerts() async {
         try {
           final live = await ptvService.fetchLiveDisruptions();
@@ -666,22 +783,93 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
         }
       }
 
-      Future<List<Trip>> loadLiveTrips() async {
+      final alertsFuture = loadAlerts();
+      if (!isSilent) {
+        _alertLoadsInFlight++;
+        alertLoadHeld = true;
+      }
+
+      // Favourites restored by _init can change the default selection.
+      if (station == null) {
+        try {
+          await initFuture;
+        } catch (_) {}
+      }
+      final requestedStation = station ?? _selectedStation;
+
+      Future<List<Trip>> loadLiveTrips(Station s) async {
         try {
           return await ptvService.fetchDepartures(
-            currentSelected.stopId,
-            station: currentSelected,
-            routeType: _activeMode.ptvRouteType, // 0 = Trains, 1 = Trams
-            maxResults: 30,
+            s.stopId,
+            station: s,
+            routeType: routeType,
+            maxResults: 20,
           );
         } catch (_) {
           return <Trip>[];
         }
       }
 
-      final results = await Future.wait<Object>([loadAlerts(), loadLiveTrips()]);
-      final fetchedAlerts = results[0] as List<ServiceAlert>;
-      final livePtvTrips = results[1] as List<Trip>;
+      // 1. Load GTFS Stations for the active mode from remote-streamed stops.txt
+      // Silent refreshes and station taps reuse the list already loaded for this mode.
+      // The mode is captured before the await: switchBaseMode can change
+      // _activeMode while the stations load is in flight.
+      final stationsMode = _activeMode;
+      final cachedStops = _stationsByMode[stationsMode];
+      final canReuseStations =
+          (isSilent || reuseStations) && cachedStops != null && cachedStops.isNotEmpty;
+
+      // When the requested station's PTV id is known offline, start its
+      // departures request now instead of waiting for the stations step.
+      final specId = canReuseStations
+          ? null
+          : ptvService.peekResolvedStopId(requestedStation, routeType: routeType);
+      final Future<List<Trip>>? speculativeTrips =
+          specId != null ? loadLiveTrips(requestedStation) : null;
+
+      final dynamicStops = canReuseStations
+          ? cachedStops
+          : await repository.getStopsForMode(
+              stationsMode,
+              onProgress: updateProgress,
+            );
+      if (!canReuseStations && dynamicStops.isNotEmpty) {
+        _stationsByMode[stationsMode] = dynamicStops;
+      }
+
+      final stationList = dynamicStops.isNotEmpty
+          ? dynamicStops
+          : [MelbourneGtfsService.defaultStationForMode(stationsMode)];
+
+      final reqNameClean = requestedStation.normalizedName;
+      final currentSelected = stationList.firstWhere(
+        (s) =>
+            (requestedStation.stopId.isNotEmpty && s.stopId == requestedStation.stopId) ||
+            (requestedStation.id.isNotEmpty && s.id == requestedStation.id) ||
+            s.normalizedName == reqNameClean,
+        orElse: () => requestedStation,
+      );
+
+      // Immediately register the full station list so station selector/search is populated
+      if (requestId == _loadRequestId &&
+          !_isDisposed &&
+          (!identical(_stations, stationList) ||
+              !identical(_selectedStation, currentSelected))) {
+        _stations = stationList;
+        _selectedStation = currentSelected;
+        notifyListeners();
+      }
+
+      // 2. Fetch Live Realtime Departures (Next 1 hour window) and Disruptions directly from PTV API
+      updateProgress(0.60, 'Fetching Live Realtime Departures: 60%');
+      final reuseSpeculative = speculativeTrips != null &&
+          (identical(currentSelected, requestedStation) ||
+              specId ==
+                  ptvService.peekResolvedStopId(currentSelected, routeType: routeType));
+      final tripsFuture =
+          reuseSpeculative ? speculativeTrips : loadLiveTrips(currentSelected);
+
+      final livePtvTrips = await tripsFuture;
 
       final now = DateTime.now();
       final oneHourFromNow = now.add(const Duration(hours: 1));
@@ -725,7 +913,6 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
 
       if (requestId == _loadRequestId && !_isDisposed) {
         _trips = mergedTrips;
-        _alerts = fetchedAlerts;
         _stations = stationList;
         _selectedStation = currentSelected;
         if (!isSilent) {
@@ -733,7 +920,19 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
           _loadingProgress = 1.0;
           _loadingStatus = 'Complete';
         }
+        _lastRefreshAt = _clock();
+        // Count the next auto-refresh from this load, not from app start.
+        if (_autoRefreshTimer != null) _startAutoRefresh();
         notifyListeners();
+      }
+
+      // Alerts were requested in parallel; apply them now (usually already done).
+      final fetchedAlerts = await alertsFuture;
+      final released = releaseAlertLoad();
+      if (requestId == _loadRequestId && !_isDisposed) {
+        final changed = !_sameAlerts(fetchedAlerts, _alerts);
+        if (changed) _alerts = fetchedAlerts;
+        if (changed || released) notifyListeners();
       }
     } catch (e) {
       if (requestId == _loadRequestId && !_isDisposed) {
@@ -746,6 +945,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
         }
       }
     } finally {
+      if (releaseAlertLoad() && !_isDisposed) notifyListeners();
       if (isSilent) _isSilentRefreshing = false;
     }
   }

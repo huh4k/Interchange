@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
+import '../core/gtfs_csv.dart';
 import '../core/heavy_work.dart';
 import '../domain/entities/station.dart';
 import '../domain/value_objects/ptv_mode.dart';
@@ -185,6 +186,65 @@ class MelbourneGtfsService {
     return null;
   }
 
+  /// Stations from the on-disk cache only (no network), or null when there is none.
+  static Future<List<Station>?> loadCachedStops({
+    PtvMode mode = PtvMode.metroTrain,
+    File? localFile,
+  }) async {
+    final targetFile = localFile ?? await getLocalStopsFile(mode);
+    if (targetFile == null) return null;
+    final cached = await _loadCachedStations(targetFile, mode: mode);
+    return (cached != null && cached.isNotEmpty) ? cached : null;
+  }
+
+  /// Checks the remote stops feed with the saved ETag. Returns the new station
+  /// list when the feed changed, or null when it is unchanged or the check
+  /// failed for any reason (this never throws).
+  static Future<List<Station>?> revalidateStops({
+    required PtvMode mode,
+    File? localFile,
+    http.Client? client,
+    Duration responseTimeout = const Duration(seconds: 10),
+    Duration idleTimeout = const Duration(seconds: 20),
+  }) async {
+    try {
+      final targetFile = localFile ?? await getLocalStopsFile(mode);
+      final etagFile = targetFile != null ? _getEtagFile(targetFile) : null;
+      String? savedEtag;
+      if (etagFile != null && await etagFile.exists()) {
+        try {
+          savedEtag = (await etagFile.readAsString()).trim();
+        } catch (_) {}
+      }
+      final hasLocalCache = targetFile != null && await targetFile.exists();
+
+      final request = http.Request('GET', Uri.parse(stopsUrlForMode(mode)));
+      if (savedEtag != null && savedEtag.isNotEmpty && hasLocalCache) {
+        request.headers['If-None-Match'] = savedEtag;
+      }
+      final response = await (client ?? http.Client()).send(request).timeout(responseTimeout);
+
+      if (response.statusCode == 304) {
+        await response.stream.drain<void>();
+        return null;
+      }
+      if (response.statusCode != 200) {
+        await response.stream.drain<void>();
+        return null;
+      }
+      final stations = await _streamAndParseStops(
+        streamedResponse: response,
+        targetFile: targetFile,
+        etagFile: etagFile,
+        mode: mode,
+        idleTimeout: idleTimeout,
+      );
+      return stations.isNotEmpty ? stations : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Streams stops.txt for the given [mode] from remote repository, saves it to local disk, and parses stations.
   /// Uses HTTP ETag conditional headers (If-None-Match) to avoid downloading when repo is unchanged.
   /// Throws [GtfsNetworkException] if network is not connected and no local cache exists.
@@ -194,6 +254,8 @@ class MelbourneGtfsService {
     http.Client? client,
     GtfsProgressCallback? onProgress,
     bool forceRefresh = false,
+    Duration responseTimeout = const Duration(seconds: 10),
+    Duration idleTimeout = const Duration(seconds: 20),
   }) async {
     File? targetFile = localFile;
     targetFile ??= await getLocalStopsFile(mode);
@@ -220,7 +282,7 @@ class MelbourneGtfsService {
         request.headers['If-None-Match'] = savedEtag;
       }
 
-      final streamedResponse = await httpClient.send(request);
+      final streamedResponse = await httpClient.send(request).timeout(responseTimeout);
 
       if (streamedResponse.statusCode == 304) {
         // Repo is unchanged: load from local cache
@@ -241,6 +303,7 @@ class MelbourneGtfsService {
           etagFile: etagFile,
           mode: mode,
           onProgress: onProgress,
+          idleTimeout: idleTimeout,
         );
         return stations;
       }
@@ -273,6 +336,7 @@ class MelbourneGtfsService {
     File? etagFile,
     PtvMode mode = PtvMode.metroTrain,
     GtfsProgressCallback? onProgress,
+    Duration idleTimeout = const Duration(seconds: 20),
   }) async {
     File? tempFile;
     IOSink? sink;
@@ -298,7 +362,7 @@ class MelbourneGtfsService {
       int downloaded = 0;
       final modeLabel = mode == PtvMode.metroTram ? 'Tram' : 'Metro';
 
-      await for (final chunk in streamedResponse.stream) {
+      await for (final chunk in streamedResponse.stream.timeout(idleTimeout)) {
         sink?.add(chunk);
         lineController.add(chunk);
         downloaded += chunk.length;
@@ -342,6 +406,12 @@ class MelbourneGtfsService {
           } catch (_) {}
         }
 
+        // stops.txt changed: drop the stale binary index and in-memory index
+        // so later cache reads cannot serve the old station list.
+        try {
+          await File(p.join(targetFile.parent.path, GtfsIndexEngine.binaryIndexFilename)).delete();
+        } catch (_) {}
+        GtfsIndexEngine.invalidate(targetFile.parent.path);
         try {
           GtfsIndexEngine.getOrCreateIndex(targetFile.parent);
         } catch (_) {}
@@ -387,7 +457,7 @@ class MelbourneGtfsService {
 
       if (headers == null) {
         final headerLine = line.replaceAll('\uFEFF', '');
-        headers = _parseCsvRow(headerLine);
+        headers = parseGtfsCsvRow(headerLine);
         stopIdIdx = headers.indexOf('stop_id');
         stopNameIdx = headers.indexOf('stop_name');
         stopLatIdx = headers.indexOf('stop_lat');
@@ -400,7 +470,7 @@ class MelbourneGtfsService {
         continue;
       }
 
-      final cols = _parseCsvRow(line);
+      final cols = parseGtfsCsvRow(line);
       if (cols.length <= stopNameIdx) continue;
 
       final rawStopId = stopIdIdx != -1 && cols.length > stopIdIdx ? cols[stopIdIdx] : '';
@@ -482,7 +552,7 @@ class MelbourneGtfsService {
     if (lines.isEmpty) return [fallbackStation];
 
     final headerLine = lines.first.replaceAll('\uFEFF', ''); // Strip BOM
-    final headers = _parseCsvRow(headerLine);
+    final headers = parseGtfsCsvRow(headerLine);
 
     final stopIdIdx = headers.indexOf('stop_id');
     final stopNameIdx = headers.indexOf('stop_name');
@@ -500,7 +570,7 @@ class MelbourneGtfsService {
       final line = lines[i].trim();
       if (line.isEmpty) continue;
 
-      final cols = _parseCsvRow(line);
+      final cols = parseGtfsCsvRow(line);
       if (cols.length <= stopNameIdx) continue;
 
       final rawStopId = stopIdIdx != -1 && cols.length > stopIdIdx ? cols[stopIdIdx] : '';
@@ -584,23 +654,4 @@ class MelbourneGtfsService {
     return name;
   }
 
-  static List<String> _parseCsvRow(String line) {
-    final values = <String>[];
-    final buffer = StringBuffer();
-    bool inQuotes = false;
-
-    for (int i = 0; i < line.length; i++) {
-      final char = line[i];
-      if (char == '"') {
-        inQuotes = !inQuotes;
-      } else if (char == ',' && !inQuotes) {
-        values.add(buffer.toString().trim().replaceAll('"', ''));
-        buffer.clear();
-      } else {
-        buffer.write(char);
-      }
-    }
-    values.add(buffer.toString().trim().replaceAll('"', ''));
-    return values;
-  }
 }

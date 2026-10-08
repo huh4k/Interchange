@@ -6,6 +6,56 @@ import '../../domain/value_objects/ptv_mode.dart';
 import '../../theme/app_theme.dart';
 import 'station_search_sheet.dart';
 
+/// De-duplicates [stations] by id and normalised name, merging the City Loop
+/// flag. Exposed for tests.
+@visibleForTesting
+List<Station> dedupeSelectorStations(List<Station> stations) {
+  final uniqueById = <String, Station>{};
+  final uniqueByName = <String, Station>{};
+
+  for (final s in stations) {
+    final cleanName = GtfsIndexEngine.normalizeStationName(s.name);
+    final nameKey = cleanName.toLowerCase();
+    final idKey = s.id;
+
+    if (uniqueById.containsKey(idKey)) {
+      final existing = uniqueById[idKey]!;
+      if (s.isCityLoop && !existing.isCityLoop) {
+        uniqueById[idKey] = existing.copyWith(isCityLoop: true);
+      }
+      continue;
+    }
+
+    if (uniqueByName.containsKey(nameKey)) {
+      final existing = uniqueByName[nameKey]!;
+      if (s.isCityLoop && !existing.isCityLoop) {
+        uniqueByName[nameKey] = existing.copyWith(isCityLoop: true);
+      }
+      continue;
+    }
+
+    final stationObj = s.copyWith(name: cleanName);
+    uniqueById[idKey] = stationObj;
+    uniqueByName[nameKey] = stationObj;
+  }
+
+  return uniqueById.values.toList();
+}
+
+typedef _Deduped = ({List<Station> stations, List<String> lowerNames});
+
+/// The dedupe is O(stations) (about 1.7k tram stops), so cache it per input
+/// list. Station lists are replaced, never mutated in place, so identity is a
+/// sound cache key.
+final Expando<_Deduped> _dedupeCache = Expando<_Deduped>('stationSelectorDedupe');
+
+_Deduped _dedupedFor(List<Station> stations) {
+  return _dedupeCache[stations] ??= () {
+    final list = dedupeSelectorStations(stations);
+    return (stations: list, lowerNames: [for (final s in list) s.name.toLowerCase()]);
+  }();
+}
+
 class StationSelectorCard extends StatelessWidget {
   final Station selectedStation;
   final List<Station> stations;
@@ -34,44 +84,24 @@ class StationSelectorCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    final uniqueById = <String, Station>{};
-    final uniqueByName = <String, Station>{};
+    final deduped = _dedupedFor(stations);
+    final combinedStations = deduped.stations;
 
-    for (final s in stations) {
-      final cleanName = GtfsIndexEngine.normalizeStationName(s.name);
-      final nameKey = cleanName.toLowerCase();
-      final idKey = s.id;
-
-      if (uniqueById.containsKey(idKey)) {
-        final existing = uniqueById[idKey]!;
-        if (s.isCityLoop && !existing.isCityLoop) {
-          uniqueById[idKey] = existing.copyWith(isCityLoop: true);
-        }
-        continue;
-      }
-
-      if (uniqueByName.containsKey(nameKey)) {
-        final existing = uniqueByName[nameKey]!;
-        if (s.isCityLoop && !existing.isCityLoop) {
-          uniqueByName[nameKey] = existing.copyWith(isCityLoop: true);
-        }
-        continue;
-      }
-
-      final stationObj = s.copyWith(name: cleanName);
-      uniqueById[idKey] = stationObj;
-      uniqueByName[nameKey] = stationObj;
-    }
-
-    final combinedStations = uniqueById.values.toList();
-
-    final matchingStation = combinedStations.firstWhere(
-      (s) =>
-          s.id == selectedStation.id ||
+    // Match the selection once per build against precomputed lower-case names.
+    final selLower = selectedStation.name.toLowerCase();
+    var matchIndex = -1;
+    for (var i = 0; i < combinedStations.length; i++) {
+      final s = combinedStations[i];
+      if (s.id == selectedStation.id ||
           s.stopId == selectedStation.stopId ||
-          s.name.toLowerCase() == selectedStation.name.toLowerCase(),
-      orElse: () => combinedStations.isNotEmpty ? combinedStations.first : selectedStation,
-    );
+          deduped.lowerNames[i] == selLower) {
+        matchIndex = i;
+        break;
+      }
+    }
+    final matchingStation = matchIndex != -1
+        ? combinedStations[matchIndex]
+        : (combinedStations.isNotEmpty ? combinedStations.first : selectedStation);
 
     final isFav = favoriteStations.any(
       (f) => f.id == matchingStation.id || f.name.toLowerCase() == matchingStation.name.toLowerCase(),

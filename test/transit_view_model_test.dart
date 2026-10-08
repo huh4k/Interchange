@@ -1,12 +1,20 @@
+import 'dart:async';
+import 'dart:convert';
+import 'package:flutter/widgets.dart' show AppLifecycleState;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gtfs_bindings/schedule.dart' as gtfs;
 import 'package:transit_app/src/data/repositories/gtfs_repository.dart';
+import 'package:transit_app/src/domain/entities/live_connection.dart';
 import 'package:transit_app/src/domain/entities/service.dart';
 import 'package:transit_app/src/domain/entities/station.dart';
 import 'package:transit_app/src/domain/entities/trips.dart';
 import 'package:transit_app/src/domain/entities/transit_route.dart';
 import 'package:transit_app/src/presentation/state/transit_view_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:geolocator/geolocator.dart' show Position;
+import 'package:transit_app/src/services/connection_advisor_service.dart';
+import 'package:transit_app/src/services/location_service.dart';
+import 'package:transit_app/src/services/melbourne_gtfs_service.dart' show MelbourneGtfsService;
 import 'package:transit_app/src/services/ptv_rt_service.dart';
 
 class _MockRepository implements IGtfsRepository {
@@ -81,6 +89,144 @@ class _MockRepository implements IGtfsRepository {
       ),
     ];
   }
+}
+
+class _FixedLocationService extends LocationService {
+  @override
+  Future<Position?> getCurrentPosition() async => Position(
+        longitude: 144.9,
+        latitude: -37.8,
+        timestamp: DateTime.now(),
+        accuracy: 1,
+        altitude: 0,
+        altitudeAccuracy: 0,
+        heading: 0,
+        headingAccuracy: 0,
+        speed: 0,
+        speedAccuracy: 0,
+      );
+}
+
+class _GeoRepository extends _MockRepository {
+  @override
+  Future<List<Station>> getStopsForMode(
+    PtvMode mode, {
+    bool forceRefresh = false,
+    GtfsProgressCallback? onProgress,
+  }) async => [
+    const Station(
+      id: 'st_1',
+      stopId: '101',
+      name: 'Flinders Street',
+      code: 'FSS',
+      lat: -37.8,
+      lon: 144.9,
+      suburb: 'Melbourne',
+      zone: 'Zone 1',
+      routes: [],
+    ),
+  ];
+}
+
+Station _station(String id, String name) => Station(
+      id: id,
+      stopId: id,
+      name: name,
+      code: id,
+      lat: -37.8,
+      lon: 144.9,
+      suburb: 'Melbourne',
+      zone: 'Zone 1',
+      routes: const [],
+    );
+
+class _GatedRepository extends _MockRepository {
+  final Completer<List<Station>> train = Completer();
+  final Completer<List<Station>> tram = Completer();
+
+  @override
+  Future<List<Station>> getStopsForMode(
+    PtvMode mode, {
+    bool forceRefresh = false,
+    GtfsProgressCallback? onProgress,
+  }) =>
+      mode == PtvMode.metroTram ? tram.future : train.future;
+}
+
+class _RecordingPtv extends _MockPtvService {
+  final departureStopIds = <String>[];
+  int disruptionCalls = 0;
+
+  @override
+  Future<List<ServiceAlert>> fetchLiveDisruptions() async {
+    disruptionCalls++;
+    return [];
+  }
+
+  @override
+  Future<List<Trip>> fetchDepartures(String stopId,
+      {int routeType = 0, int maxResults = 15, Station? station}) {
+    departureStopIds.add(station?.stopId ?? stopId);
+    return super.fetchDepartures(stopId,
+        routeType: routeType, maxResults: maxResults, station: station);
+  }
+}
+
+class _SlowLocationService extends LocationService {
+  final Completer<void> startGate = Completer<void>();
+  int stopCalls = 0;
+
+  @override
+  Future<void> startLocationTracking({void Function(Position position)? onPositionChanged}) =>
+      startGate.future;
+
+  @override
+  Future<void> stopLocationTracking() async {
+    stopCalls++;
+  }
+}
+
+class _RecordingAdvisor extends ConnectionAdvisorService {
+  int calls = 0;
+  _RecordingAdvisor() : super(ptvService: _MockPtvService());
+
+  @override
+  Future<Map<String, List<LiveConnection>>> computeUpcomingConnections({
+    required Trip activeTrip,
+    required Station currentOrNextStation,
+    required List<Station> allStations,
+  }) async {
+    calls++;
+    return {};
+  }
+}
+
+class _QuietLocationService extends LocationService {
+  @override
+  Future<void> startLocationTracking({void Function(Position position)? onPositionChanged}) async {}
+  @override
+  Future<void> stopLocationTracking() async {}
+}
+
+Position _pos(double lat, double lon) => Position(
+      longitude: lon,
+      latitude: lat,
+      timestamp: DateTime.now(),
+      accuracy: 1,
+      altitude: 0,
+      altitudeAccuracy: 0,
+      heading: 0,
+      headingAccuracy: 0,
+      speed: 0,
+      speedAccuracy: 0,
+    );
+
+class _GatedAlertsPtv extends _MockPtvService {
+  final Completer<List<ServiceAlert>> gate;
+  _GatedAlertsPtv(this.gate);
+
+  @override
+  Future<List<ServiceAlert>> fetchLiveDisruptions() => gate.future;
 }
 
 class _CountingRepository extends _MockRepository {
@@ -171,6 +317,377 @@ void main() {
       expect(viewModel.displayedTrips, isEmpty);
       await viewModel.toggleFavoriteTrip('trip_belgrave');
       expect(viewModel.displayedTrips.map((t) => t.tripId), ['trip_belgrave']);
+    });
+
+    test('locateNearestStation returns the station without selecting it', () async {
+      final vm = TransitViewModel(
+        repository: _GeoRepository(),
+        ptvService: _MockPtvService(),
+        locationService: _FixedLocationService(),
+      );
+      addTearDown(vm.dispose);
+      await vm.loadData();
+      final before = vm.selectedStation;
+      final nearest = await vm.locateNearestStation();
+      expect(nearest, isNotNull);
+      expect(nearest!.name, 'Flinders Street');
+      expect(identical(vm.selectedStation, before), isTrue);
+      expect(vm.isLocating, isFalse);
+    });
+
+    test('favorite toggle notifies before persisting completes', () async {
+      var notified = 0;
+      viewModel.addListener(() => notified++);
+      final future = viewModel.toggleFavoriteTrip('x');
+      await viewModel.initFuture;
+      await Future<void>.delayed(Duration.zero);
+      expect(notified, greaterThan(0));
+      expect(viewModel.isFavoriteTrip('x'), isTrue);
+      await future;
+    });
+
+    test('connection advisor shares the view model PTV service', () {
+      final ptv = _MockPtvService();
+      final vm = TransitViewModel(repository: _MockRepository(), ptvService: ptv);
+      addTearDown(vm.dispose);
+      expect(identical(vm.ptvService, ptv), isTrue);
+      expect(identical(vm.connectionAdvisor.ptvService, ptv), isTrue);
+
+      final defaultVm = TransitViewModel(repository: _MockRepository());
+      addTearDown(defaultVm.dispose);
+      expect(identical(defaultVm.connectionAdvisor.ptvService, defaultVm.ptvService), isTrue);
+    });
+
+    test('an injected connection advisor is used as-is', () {
+      final advisor = ConnectionAdvisorService(
+        ptvService: _MockPtvService(),
+        repository: _MockRepository(),
+      );
+      final vm = TransitViewModel(repository: _MockRepository(), connectionAdvisor: advisor);
+      addTearDown(vm.dispose);
+      expect(identical(vm.connectionAdvisor, advisor), isTrue);
+    });
+
+    test('station taps, resets and mode switches reuse loaded stations', () async {
+      final repo = _CountingRepository();
+      final vm = TransitViewModel(repository: repo, ptvService: _MockPtvService());
+      addTearDown(vm.dispose);
+      Future<void> settle() async {
+        while (vm.isLoading) {
+          await Future<void>.delayed(Duration.zero);
+        }
+      }
+
+      await vm.loadData();
+      expect(repo.stopCalls, 1);
+
+      vm.selectStation(vm.stations.first);
+      await settle();
+      expect(repo.stopCalls, 1);
+
+      vm.resetFilters();
+      await settle();
+      expect(repo.stopCalls, 1);
+
+      vm.switchBaseMode(PtvMode.metroTram);
+      await settle();
+      expect(repo.stopCalls, 2);
+
+      vm.switchBaseMode(PtvMode.metroTrain);
+      await settle();
+      expect(repo.stopCalls, 2);
+
+      await vm.loadData();
+      expect(repo.stopCalls, 3);
+    });
+
+    test('a mode switch during a stations load does not poison the other mode', () async {
+      final repo = _GatedRepository();
+      final vm = TransitViewModel(repository: repo, ptvService: _MockPtvService());
+      addTearDown(vm.dispose);
+
+      final first = vm.loadData();
+      vm.switchBaseMode(PtvMode.metroTram);
+      repo.tram.complete([_station('tram_1', 'Bourke St/Swanston St')]);
+      await Future<void>.delayed(Duration.zero);
+      repo.train.complete([_station('train_1', 'Richmond')]);
+      await first;
+      while (vm.isLoading) {
+        await Future<void>.delayed(Duration.zero);
+      }
+
+      vm.selectStation(vm.stations.first);
+      while (vm.isLoading) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(vm.stations.map((s) => s.id), ['tram_1']);
+    });
+
+    test('alerts and departures start before the stations step finishes', () async {
+      final repo = _GatedRepository();
+      final ptv = _RecordingPtv();
+      final vm = TransitViewModel(repository: repo, ptvService: ptv);
+      addTearDown(vm.dispose);
+      await vm.initFuture;
+
+      final load = vm.loadData();
+      await pumpEventQueue();
+      expect(ptv.disruptionCalls, 1);
+      expect(ptv.departureStopIds, ['1071']);
+      expect(vm.isLoading, isTrue);
+
+      repo.train.complete([_station('1071', 'Flinders Street Station')]);
+      await load;
+      // The speculative request is reused: still exactly one departures call.
+      expect(ptv.departureStopIds, ['1071']);
+      expect(vm.isLoading, isFalse);
+      expect(vm.trips, isNotEmpty);
+    });
+
+    test('a station without a direct PTV id gets no speculative departures call', () async {
+      final repo = _GatedRepository();
+      final ptv = _RecordingPtv();
+      final vm = TransitViewModel(repository: repo, ptvService: ptv);
+      addTearDown(vm.dispose);
+      await vm.initFuture;
+
+      final odd = _station('vic:rail:STL', 'St Albans');
+      final load = vm.loadData(station: odd);
+      await pumpEventQueue();
+      expect(ptv.departureStopIds, isEmpty);
+
+      repo.train.complete([odd]);
+      await load;
+      expect(ptv.departureStopIds, ['vic:rail:STL']);
+    });
+
+    test('connections refresh does not wait for the location service to start', () async {
+      final location = _SlowLocationService();
+      final advisor = _RecordingAdvisor();
+      final vm = TransitViewModel(
+        repository: _MockRepository(),
+        ptvService: _MockPtvService(),
+        locationService: location,
+        connectionAdvisor: advisor,
+      );
+      addTearDown(vm.dispose);
+      final trip = Trip(
+        tripId: 'trip_x',
+        routeId: 'r',
+        serviceId: 's',
+        headsign: 'X',
+        stops: [
+          ServiceStop(station: MelbourneGtfsService.defaultStation, stopSequence: 1),
+        ],
+        departure: TripDeparture(
+          scheduledTime: DateTime.now(),
+          platform: '1',
+          lineCode: 'X',
+          routeName: 'X',
+          destination: 'X',
+          type: TransitType.metro,
+        ),
+      );
+
+      final start = vm.startTrackingTrip(trip);
+      await pumpEventQueue();
+      expect(advisor.calls, 1); // ran while the location start is still pending
+
+      vm.stopTracking();
+      location.startGate.complete();
+      await start;
+      expect(location.stopCalls, greaterThanOrEqualTo(2)); // stopTracking + post-await cleanup
+    });
+
+    group('live ride tracking', () {
+      final a = _station('a', 'Alpha').copyWith(lat: -37.80, lon: 144.90);
+      final b = _station('b', 'Bravo').copyWith(lat: -37.85, lon: 144.95);
+      final c = _station('c', 'Charlie').copyWith(lat: -37.90, lon: 145.00);
+      Trip rideTrip() => Trip(
+            tripId: 'ride',
+            routeId: 'r',
+            serviceId: 's',
+            headsign: 'Charlie',
+            stops: [
+              ServiceStop(station: a, stopSequence: 1),
+              ServiceStop(station: b, stopSequence: 2),
+              ServiceStop(station: c, stopSequence: 3),
+            ],
+            departure: TripDeparture(
+              scheduledTime: DateTime.now(),
+              platform: '1',
+              lineCode: 'X',
+              routeName: 'X',
+              destination: 'Charlie',
+              type: TransitType.metro,
+            ),
+          );
+
+      test('GPS fixes notify only when the stop changes, delivered once', () async {
+        final location = _QuietLocationService();
+        final vm = TransitViewModel(
+          repository: _MockRepository(),
+          ptvService: _MockPtvService(),
+          locationService: location,
+          connectionAdvisor: _RecordingAdvisor(),
+        );
+        addTearDown(vm.dispose);
+        await vm.initFuture;
+        await vm.startTrackingTrip(rideTrip(), initialStation: a);
+
+        var notifies = 0;
+        vm.addListener(() => notifies++);
+        for (var i = 0; i < 3; i++) {
+          location.emitMockPosition(_pos(-37.80, 144.90));
+          await Future<void>.delayed(Duration.zero);
+        }
+        expect(notifies, 0);
+        expect(vm.currentStopStation?.id, 'a');
+
+        location.emitMockPosition(_pos(-37.85, 144.95));
+        await Future<void>.delayed(Duration.zero);
+        expect(notifies, 1);
+        expect(vm.currentStopStation?.id, 'b');
+        expect(vm.previousStopStation?.id, 'a');
+        expect(vm.nextStopStation?.id, 'c');
+      });
+
+      test('silent refresh with unchanged data notifies once', () async {
+        await viewModel.loadData();
+        var notifies = 0;
+        viewModel.addListener(() => notifies++);
+        await viewModel.loadData(isSilent: true);
+        expect(notifies, 1);
+      });
+
+      testWidgets('connections poll every 90s hidden and every 20s while the sheet is open', (tester) async {
+        final advisor = _RecordingAdvisor();
+        final vm = TransitViewModel(
+          repository: _MockRepository(),
+          ptvService: _MockPtvService(),
+          locationService: _QuietLocationService(),
+          connectionAdvisor: advisor,
+        );
+        // Disposed manually below: fake timers must be gone before the test ends.
+
+        await vm.startTrackingTrip(rideTrip(), initialStation: a);
+        final base = advisor.calls;
+
+        await tester.pump(const Duration(seconds: 60));
+        expect(advisor.calls, base); // hidden: nothing before 90s
+        await tester.pump(const Duration(seconds: 31));
+        expect(advisor.calls, base + 1);
+
+        vm.liveRideSheetOpened();
+        await tester.pump(const Duration(seconds: 41));
+        expect(advisor.calls, base + 3); // 20s cadence
+
+        vm.liveRideSheetClosed();
+        final before = advisor.calls;
+        await tester.pump(const Duration(seconds: 60));
+        expect(advisor.calls, before); // back to 90s cadence
+        vm.stopTracking();
+        vm.dispose();
+      });
+    });
+
+    group('lifecycle refresh', () {
+      test('inactive->resumed right after a load does not refetch; stale data does', () async {
+        var now = DateTime(2026, 1, 1, 12);
+        final ptv = _RecordingPtv();
+        final vm = TransitViewModel(
+          repository: _MockRepository(),
+          ptvService: ptv,
+          clock: () => now,
+        );
+        addTearDown(vm.dispose);
+        await vm.loadData();
+        final base = ptv.departureStopIds.length;
+
+        vm.didChangeAppLifecycleState(AppLifecycleState.inactive);
+        vm.didChangeAppLifecycleState(AppLifecycleState.resumed);
+        await pumpEventQueue();
+        expect(ptv.departureStopIds.length, base);
+
+        now = now.add(const Duration(seconds: 20));
+        vm.didChangeAppLifecycleState(AppLifecycleState.resumed);
+        await pumpEventQueue();
+        expect(ptv.departureStopIds.length, base + 1);
+      });
+
+      testWidgets('auto refresh ticks 30s after the last completed load', (tester) async {
+        final ptv = _RecordingPtv();
+        final vm = TransitViewModel(repository: _MockRepository(), ptvService: ptv);
+        await vm.loadData();
+        final base = ptv.departureStopIds.length;
+
+        await tester.pump(const Duration(seconds: 20));
+        await vm.loadData(); // user-initiated load re-arms the timer
+        final afterManual = ptv.departureStopIds.length;
+        expect(afterManual, base + 1);
+
+        await tester.pump(const Duration(seconds: 29));
+        expect(ptv.departureStopIds.length, afterManual);
+        await tester.pump(const Duration(seconds: 2));
+        expect(ptv.departureStopIds.length, afterManual + 1);
+        vm.dispose();
+      });
+    });
+
+    test('ensureInitialLoad loads once and uses a restored favourite station', () async {
+      SharedPreferences.setMockInitialValues({});
+      final repo = _CountingRepository();
+      final ptv = _RecordingPtv();
+      final vm = TransitViewModel(repository: repo, ptvService: ptv);
+      addTearDown(vm.dispose);
+
+      final a = vm.ensureInitialLoad();
+      final b = vm.ensureInitialLoad();
+      expect(identical(a, b), isTrue);
+      await a;
+      expect(repo.stopCalls, 1);
+    });
+
+    test('the initial load departs from the restored favourite station', () async {
+      final fav = _station('2002', 'Favourite Station');
+      SharedPreferences.setMockInitialValues({
+        'favorite_stations': jsonEncode([fav.toMap()]),
+      });
+      final ptv = _RecordingPtv();
+      final vm = TransitViewModel(repository: _MockRepository(), ptvService: ptv);
+      addTearDown(vm.dispose);
+
+      await vm.ensureInitialLoad();
+      expect(ptv.departureStopIds, contains('2002'));
+    });
+
+    test('departures are published before slow alerts arrive', () async {
+      final gate = Completer<List<ServiceAlert>>();
+      final ptv = _GatedAlertsPtv(gate);
+      final vm = TransitViewModel(repository: _MockRepository(), ptvService: ptv);
+      addTearDown(vm.dispose);
+      await vm.initFuture;
+
+      final load = vm.loadData();
+      await pumpEventQueue();
+      expect(vm.trips, isNotEmpty);
+      expect(vm.isLoading, isFalse);
+      expect(vm.isLoadingAlerts, isTrue);
+      expect(vm.alerts, isEmpty);
+
+      gate.complete([
+        ServiceAlert(
+          id: 'a1',
+          title: 'Delay',
+          description: 'd',
+          lineCode: 'BEL',
+          timestamp: DateTime.now(),
+          severity: ServiceStatus.disrupted,
+        ),
+      ]);
+      await load;
+      expect(vm.alerts.single.id, 'a1');
+      expect(vm.isLoadingAlerts, isFalse);
     });
 
     test('silent refresh reuses the loaded station list', () async {
