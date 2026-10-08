@@ -2,7 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
 import 'package:http/testing.dart';
+import 'package:transit_app/src/core/http_client_factory.dart';
 import 'package:transit_app/src/domain/entities/station.dart';
 import 'package:transit_app/src/services/ptv_rt_service.dart';
 
@@ -142,6 +144,34 @@ void main() {
       );
       final alerts = await service.fetchLiveDisruptions();
       expect(alerts.map((a) => a.id).toSet(), {'1', '2', '3', '4'});
+    });
+
+    test('a failed first attempt is retried once; timeouts are not retried', () async {
+      var calls = 0;
+      final flaky = PtvRealtimeService(
+        client: MockClient((_) async {
+          calls++;
+          if (calls == 1) throw http.ClientException('connection closed');
+          return http.Response('{"departures":[],"stops":{}}', 200);
+        }),
+      );
+      expect(await flaky.fetchPattern('1', 0), isNotNull);
+      expect(calls, 2);
+
+      var stalled = 0;
+      final slow = PtvRealtimeService(
+        client: MockClient((_) {
+          stalled++;
+          return Completer<http.Response>().future;
+        }),
+        responseTimeout: const Duration(milliseconds: 30),
+      );
+      expect(await slow.fetchPattern('1', 0), isNull);
+      expect(stalled, 1);
+    });
+
+    test('the app HTTP client is an IOClient on the VM', () {
+      expect(createAppHttpClient(), isA<IOClient>());
     });
 
     test('PtvRealtimeService resolves stop ID accurately for Frankston and hubs', () async {

@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:http/http.dart' as http;
 import '../core/heavy_work.dart';
+import '../core/http_client_factory.dart';
 import '../domain/entities/service.dart';
 import '../domain/entities/transit_route.dart';
 import '../domain/entities/station.dart';
@@ -151,11 +153,23 @@ class PtvRealtimeService {
     http.Client? client,
     this._responseTimeout = const Duration(seconds: 15),
     this._idleTimeout = const Duration(seconds: 15),
-  }) : _client = client ?? http.Client();
+  }) : _client = client ?? createAppHttpClient();
 
   /// GET [signedUrl] with a response-header timeout and a per-chunk idle
   /// timeout. Equivalent to `Client.get` + `Response.fromStream` otherwise.
   Future<http.Response> _get(String signedUrl) async {
+    try {
+      return await _getOnce(signedUrl);
+    } on TimeoutException {
+      rethrow;
+    } catch (_) {
+      // GETs are idempotent. A kept-alive connection the server has already
+      // closed fails on first use; one retry opens a fresh connection.
+      return _getOnce(signedUrl);
+    }
+  }
+
+  Future<http.Response> _getOnce(String signedUrl) async {
     final request = http.Request('GET', Uri.parse(signedUrl))
       ..headers.addAll(_defaultHeaders);
     final streamed = await _client.send(request).timeout(_responseTimeout);

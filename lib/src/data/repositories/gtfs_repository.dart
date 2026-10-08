@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import '../../core/heavy_work.dart';
+import '../../core/http_client_factory.dart';
 import '../datasources/gtfs_day_timetable.dart';
 import '../datasources/gtfs_zip_extractor.dart';
 import '../../domain/entities/station.dart';
@@ -73,7 +74,7 @@ class PtvGtfsRepository implements IGtfsRepository {
     Future<Directory> Function()? tempDir,
     this._stopsFileFor,
     PtvRealtimeService? realtimeService,
-  })  : _client = client ?? http.Client(),
+  })  : _client = client ?? createAppHttpClient(),
         _supportDir = supportDir ?? getApplicationSupportDirectory,
         _tempDir = tempDir ?? getTemporaryDirectory,
         _realtimeService =
