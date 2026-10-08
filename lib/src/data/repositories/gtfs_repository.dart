@@ -1,6 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
-import 'package:archive/archive.dart';
 import 'package:gtfs_bindings/schedule.dart' as gtfs;
 import 'package:gtfs_realtime_bindings/gtfs_realtime_bindings.dart' as gtfs_rt;
 import 'package:http/http.dart' as http;
@@ -10,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import '../../core/heavy_work.dart';
 import '../datasources/gtfs_day_timetable.dart';
+import '../datasources/gtfs_zip_extractor.dart';
 import '../../domain/entities/station.dart';
 import '../../domain/entities/service.dart';
 import '../../domain/entities/trips.dart';
@@ -51,15 +50,30 @@ class PtvGtfsRepository implements IGtfsRepository {
   final Duration _zipIdleTimeout;
   final PtvRealtimeService _realtimeService;
 
-  List<int>? _cachedMasterBytes;
+  final Future<Directory> Function() _supportDir;
+  final Future<Directory> Function() _tempDir;
+
+  // Single-flight state: concurrent callers share one download and one
+  // extraction per mode instead of racing each other on the same files.
+  Future<File>? _masterDownload;
+  final Map<PtvMode, Future<gtfs.DirectoryDataset?>> _datasetLoads = {};
+  final Map<PtvMode, Set<GtfsProgressCallback>> _progressListeners = {};
+  final Map<PtvMode, (double, String)> _lastProgress = {};
+  Future<Directory>? _supportDirFuture;
+
+  static const Duration _masterMaxAge = Duration(days: 7);
 
   PtvGtfsRepository({
     required this.masterZipUrl,
     http.Client? client,
     this._zipResponseTimeout = const Duration(seconds: 30),
     this._zipIdleTimeout = const Duration(seconds: 60),
+    Future<Directory> Function()? supportDir,
+    Future<Directory> Function()? tempDir,
     PtvRealtimeService? realtimeService,
   })  : _client = client ?? http.Client(),
+        _supportDir = supportDir ?? getApplicationSupportDirectory,
+        _tempDir = tempDir ?? getTemporaryDirectory,
         _realtimeService =
             realtimeService ?? PtvRealtimeService(client: client);
 
@@ -69,26 +83,115 @@ class PtvGtfsRepository implements IGtfsRepository {
     bool forceRefresh = false,
     GtfsProgressCallback? onProgress,
   }) async {
-    final appSupportDir = await getApplicationSupportDirectory();
+    // Fan progress out to every caller waiting on this mode's load.
+    final listeners = _progressListeners.putIfAbsent(mode, () => {});
+    if (onProgress != null) {
+      listeners.add(onProgress);
+      final last = _lastProgress[mode];
+      if (last != null && _datasetLoads.containsKey(mode)) {
+        onProgress(last.$1, last.$2);
+      }
+    }
+    try {
+      var inFlight = _datasetLoads[mode];
+      if (inFlight != null && forceRefresh) {
+        // Never run two extractions into the same directory at once.
+        try {
+          await inFlight;
+        } catch (_) {}
+        inFlight = null;
+      }
+      if (inFlight != null) return await inFlight;
+
+      // No await between the check above and registering the load below.
+      late final Future<gtfs.DirectoryDataset?> load;
+      load = _loadDataset(mode, forceRefresh).whenComplete(() {
+        if (identical(_datasetLoads[mode], load)) {
+          _datasetLoads.remove(mode);
+          _lastProgress.remove(mode);
+        }
+      });
+      _datasetLoads[mode] = load;
+      return await load;
+    } finally {
+      if (onProgress != null) listeners.remove(onProgress);
+    }
+  }
+
+  void _emitProgress(PtvMode mode, double progress, String status) {
+    _lastProgress[mode] = (progress, status);
+    for (final l in List.of(_progressListeners[mode] ?? const {})) {
+      l(progress, status);
+    }
+  }
+
+  Future<gtfs.DirectoryDataset?> _loadDataset(PtvMode mode, bool forceRefresh) async {
+    void progress(double p, String s) => _emitProgress(mode, p, s);
+
+    final appSupportDir = await (_supportDirFuture ??= _supportDir());
     final modeDir = Directory(
       p.join(appSupportDir.path, 'ptv_gtfs', mode.name),
     );
     final routesFile = File(p.join(modeDir.path, 'routes.txt'));
 
     if (!forceRefresh && await _hasFreshCache(routesFile)) {
-      onProgress?.call(1.0, 'Cached Timetables Loaded');
+      progress(1.0, 'Cached Timetables Loaded');
       return gtfs.DirectoryDataset(directory: modeDir);
     }
 
-    if (forceRefresh) _cachedMasterBytes = null;
-    _cachedMasterBytes ??= await _fetchMasterZip(onProgress: onProgress);
     // The files on disk are about to change: drop anything derived from them.
     clearTimetableCache(modeDir.path);
     GtfsIndexEngine.invalidate(modeDir.path);
-    await _extractModeToDirectory(_cachedMasterBytes!, mode, modeDir);
-    onProgress?.call(1.0, 'Network Data Loaded: 100%');
+
+    var master = await _ensureMasterZip(forceRefresh: forceRefresh, onProgress: progress);
+    try {
+      await _extractOffThread(master.path, mode.id, modeDir.path);
+    } catch (_) {
+      // A cached master may be truncated or corrupt: download once more.
+      try {
+        await master.delete();
+      } catch (_) {}
+      master = await _ensureMasterZip(forceRefresh: true, onProgress: progress);
+      await _extractOffThread(master.path, mode.id, modeDir.path);
+    }
+    GtfsIndexEngine.invalidate(modeDir.path);
+    progress(1.0, 'Network Data Loaded: 100%');
 
     return gtfs.DirectoryDataset(directory: modeDir);
+  }
+
+  /// Static and minimal so the isolate closure captures only plain strings.
+  static Future<void> _extractOffThread(String masterPath, String modeId, String targetPath) =>
+      runHeavy(1 << 30, () => extractGtfsModeSync(masterPath, modeId, targetPath));
+
+  Future<File> _masterZipFile() async =>
+      File(p.join((await _tempDir()).path, 'ptv_gtfs_master.zip'));
+
+  Future<File> _ensureMasterZip({
+    required bool forceRefresh,
+    GtfsProgressCallback? onProgress,
+  }) {
+    final inFlight = _masterDownload;
+    if (inFlight != null) return inFlight;
+    late final Future<File> download;
+    download = _downloadOrReuseMaster(forceRefresh, onProgress).whenComplete(() {
+      if (identical(_masterDownload, download)) _masterDownload = null;
+    });
+    _masterDownload = download;
+    return download;
+  }
+
+  Future<File> _downloadOrReuseMaster(bool forceRefresh, GtfsProgressCallback? onProgress) async {
+    final dest = await _masterZipFile();
+    if (!forceRefresh && await dest.exists()) {
+      final age = DateTime.now().difference(await dest.lastModified());
+      if (age < _masterMaxAge) {
+        onProgress?.call(0.9, 'Using Downloaded Feed');
+        return dest;
+      }
+    }
+    await _downloadMasterZip(dest, onProgress: onProgress);
+    return dest;
   }
 
   @override
@@ -133,14 +236,20 @@ class PtvGtfsRepository implements IGtfsRepository {
 
   @override
   Future<void> clearCache() async {
-    _cachedMasterBytes = null;
+    _masterDownload = null;
+    _datasetLoads.clear();
+    _lastProgress.clear();
     clearTimetableCache();
     GtfsIndexEngine.clearCache();
+    try {
+      final master = await _masterZipFile();
+      if (await master.exists()) await master.delete();
+    } catch (_) {}
     final localStopsFile = await MelbourneGtfsService.getLocalStopsFile();
     if (localStopsFile != null && await localStopsFile.exists()) {
       await localStopsFile.delete();
     }
-    final appSupportDir = await getApplicationSupportDirectory();
+    final appSupportDir = await (_supportDirFuture ??= _supportDir());
     final cacheDir = Directory(p.join(appSupportDir.path, 'ptv_gtfs'));
     if (await cacheDir.exists()) {
       await cacheDir.delete(recursive: true);
@@ -448,7 +557,9 @@ class PtvGtfsRepository implements IGtfsRepository {
   }
 
 
-  Future<List<int>> _fetchMasterZip({GtfsProgressCallback? onProgress}) async {
+  /// Streams the master feed to [dest] on disk (never into memory), via a
+  /// `.part` file so an interrupted download is not mistaken for a good one.
+  Future<void> _downloadMasterZip(File dest, {GtfsProgressCallback? onProgress}) async {
     onProgress?.call(0.05, 'Connecting to PTV Feed... 5%');
     final request = http.Request('GET', masterZipUrl);
     final streamedResponse = await _client.send(request).timeout(_zipResponseTimeout);
@@ -458,73 +569,37 @@ class PtvGtfsRepository implements IGtfsRepository {
       );
     }
 
+    await dest.parent.create(recursive: true);
+    final part = File('${dest.path}.part');
+    final sink = part.openWrite();
     final contentLength = streamedResponse.contentLength ?? 0;
-    final builder = BytesBuilder(copy: false);
     int downloaded = 0;
 
-    await for (final chunk in streamedResponse.stream.timeout(_zipIdleTimeout)) {
-      builder.add(chunk);
-      downloaded += chunk.length;
-      if (contentLength > 0 && onProgress != null) {
-        final p = (downloaded / contentLength).clamp(0.05, 0.90);
-        final pct = (p * 100).toInt();
-        onProgress(p, 'Streaming Feed to Memory: $pct%');
-      }
-    }
-
-    onProgress?.call(0.95, 'Decompressing Archive: 95%');
-    return builder.takeBytes();
-  }
-
-  Future<void> _extractModeToDirectory(
-    List<int> masterBytes,
-    PtvMode mode,
-    Directory targetDir,
-  ) async {
-    if (await targetDir.exists()) {
-      await targetDir.delete(recursive: true);
-    }
-    await targetDir.create(recursive: true);
-
-    final masterArchive = ZipDecoder().decodeBytes(masterBytes);
-
-    for (final file in masterArchive) {
-      if (!file.isFile) continue;
-
-      final normName = file.name.replaceAll('\\', '/');
-
-      final isTargetMode =
-          normName.startsWith('${mode.id}/') ||
-          normName.contains('/${mode.id}/') ||
-          normName.endsWith('/${mode.id}.zip') ||
-          normName == '${mode.id}.zip';
-
-      if (!isTargetMode) continue;
-
-      final bytes = _getArchiveFileBytes(file);
-
-      if (normName.endsWith('.zip')) {
-        final innerArchive = ZipDecoder().decodeBytes(bytes);
-        for (final innerFile in innerArchive) {
-          if (innerFile.isFile) {
-            final innerBytes = _getArchiveFileBytes(innerFile);
-            final outFile = File(
-              p.join(targetDir.path, p.basename(innerFile.name)),
-            );
-            await outFile.create(recursive: true);
-            await outFile.writeAsBytes(innerBytes);
-          }
+    try {
+      await for (final chunk in streamedResponse.stream.timeout(_zipIdleTimeout)) {
+        sink.add(chunk);
+        downloaded += chunk.length;
+        if (contentLength > 0 && onProgress != null) {
+          final pr = (downloaded / contentLength).clamp(0.05, 0.90);
+          final pct = (pr * 100).toInt();
+          onProgress(pr, 'Downloading Feed: $pct%');
         }
-      } else if (normName.endsWith('.txt')) {
-        final outFile = File(p.join(targetDir.path, p.basename(normName)));
-        await outFile.create(recursive: true);
-        await outFile.writeAsBytes(bytes);
       }
+      await sink.flush();
+      await sink.close();
+    } catch (_) {
+      try {
+        await sink.close();
+      } catch (_) {}
+      try {
+        await part.delete();
+      } catch (_) {}
+      rethrow;
     }
-  }
 
-  static List<int> _getArchiveFileBytes(ArchiveFile file) {
-    return file.content as List<int>;
+    if (await dest.exists()) await dest.delete();
+    await part.rename(dest.path);
+    onProgress?.call(0.92, 'Feed Downloaded');
   }
 
   static List<ServiceAlert> parseRealtimeServiceAlerts(List<int> bytes) {
