@@ -5,8 +5,13 @@ import 'package:transit_app/src/domain/entities/station.dart';
 import 'package:transit_app/src/domain/entities/trips.dart';
 import 'package:transit_app/src/domain/value_objects/transit_type.dart';
 import 'package:transit_app/src/presentation/widgets/trip_details_sheet.dart';
+import 'package:transit_app/src/services/ptv_rt_service.dart';
 
 void main() {
+  // Keep the sheet offline: with credentials unset, pattern lookups return
+  // immediately instead of waiting on the (test-bound) HTTP client.
+  setUpAll(() => EnvService.setCredentials(userId: '', apiKey: ''));
+
   const stationFlinders = Station(
     id: '1071',
     stopId: '1071',

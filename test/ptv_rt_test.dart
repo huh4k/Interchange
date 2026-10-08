@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -51,6 +52,44 @@ void main() {
       );
       final alerts = await service.fetchLiveDisruptions();
       expect(alerts.length, 600);
+    });
+
+    test('Stalled responses time out and return empty results', () async {
+      final service = PtvRealtimeService(
+        client: MockClient((_) => Completer<http.Response>().future),
+        responseTimeout: const Duration(milliseconds: 50),
+        idleTimeout: const Duration(milliseconds: 50),
+      );
+      expect(await service.fetchDepartures('1071').timeout(const Duration(seconds: 1)), isEmpty);
+      expect(await service.fetchLiveDisruptions().timeout(const Duration(seconds: 1)), isEmpty);
+      expect(await service.fetchPattern('1', 0).timeout(const Duration(seconds: 1)), isNull);
+    });
+
+    test('Stalled body streams time out and return empty results', () async {
+      final controllers = <StreamController<List<int>>>[];
+      addTearDown(() {
+        for (final c in controllers) {
+          c.close();
+        }
+      });
+      final service = PtvRealtimeService(
+        client: MockClient.streaming((_, _) async {
+          final c = StreamController<List<int>>();
+          controllers.add(c);
+          return http.StreamedResponse(c.stream, 200);
+        }),
+        responseTimeout: const Duration(milliseconds: 50),
+        idleTimeout: const Duration(milliseconds: 50),
+      );
+      expect(await service.fetchDepartures('1071').timeout(const Duration(seconds: 1)), isEmpty);
+      expect(await service.fetchPattern('1', 0).timeout(const Duration(seconds: 1)), isNull);
+    });
+
+    test('fetchPattern returns decoded JSON on success', () async {
+      final service = PtvRealtimeService(
+        client: MockClient((_) async => http.Response('{"departures":[],"stops":{}}', 200)),
+      );
+      expect(await service.fetchPattern('1', 0), isNotNull);
     });
 
     test('PtvRealtimeService resolves stop ID accurately for Frankston and hubs', () async {

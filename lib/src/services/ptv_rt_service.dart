@@ -58,6 +58,8 @@ class EnvService {
 
 class PtvRealtimeService {
   final http.Client _client;
+  final Duration _responseTimeout;
+  final Duration _idleTimeout;
   final Map<String, String> _resolvedStopIdCache = {};
 
   static final RegExp _numericStopIdRegex = RegExp(r'^\d{3,5}$');
@@ -72,7 +74,33 @@ class PtvRealtimeService {
     'User-Agent': 'Mozilla/5.0 (Linux; Android) TransitApp/1.0',
   };
 
-  PtvRealtimeService({http.Client? client}) : _client = client ?? http.Client();
+  /// [responseTimeout] bounds the wait for response headers; [idleTimeout]
+  /// bounds the gap between body chunks. There is deliberately no total
+  /// timeout so large bodies on slow links can still complete.
+  PtvRealtimeService({
+    http.Client? client,
+    this._responseTimeout = const Duration(seconds: 15),
+    this._idleTimeout = const Duration(seconds: 15),
+  }) : _client = client ?? http.Client();
+
+  /// GET [signedUrl] with a response-header timeout and a per-chunk idle
+  /// timeout. Equivalent to `Client.get` + `Response.fromStream` otherwise.
+  Future<http.Response> _get(String signedUrl) async {
+    final request = http.Request('GET', Uri.parse(signedUrl))
+      ..headers.addAll(_defaultHeaders);
+    final streamed = await _client.send(request).timeout(_responseTimeout);
+    final bytes =
+        await http.ByteStream(streamed.stream.timeout(_idleTimeout)).toBytes();
+    return http.Response.bytes(
+      bytes,
+      streamed.statusCode,
+      request: streamed.request,
+      headers: streamed.headers,
+      isRedirect: streamed.isRedirect,
+      persistentConnection: streamed.persistentConnection,
+      reasonPhrase: streamed.reasonPhrase,
+    );
+  }
 
   static String generateSignedUrl(String requestPath) {
     final devId = EnvService.userId;
@@ -185,10 +213,7 @@ class PtvRealtimeService {
 
     final signedUrl = generateSignedUrl('/v3/disruptions');
     try {
-      final response = await _client.get(
-        Uri.parse(signedUrl),
-        headers: _defaultHeaders,
-      );
+      final response = await _get(signedUrl);
       if (response.statusCode != 200) return [];
 
       final body = response.body;
@@ -245,10 +270,7 @@ class PtvRealtimeService {
     final signedUrl = generateSignedUrl('/v3/search/$encodedQuery?route_types=$routeType');
 
     try {
-      final response = await _client.get(
-        Uri.parse(signedUrl),
-        headers: _defaultHeaders,
-      );
+      final response = await _get(signedUrl);
       if (response.statusCode != 200) return [];
 
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -301,10 +323,7 @@ class PtvRealtimeService {
     );
 
     try {
-      final response = await _client.get(
-        Uri.parse(signedUrl),
-        headers: _defaultHeaders,
-      );
+      final response = await _get(signedUrl);
       if (response.statusCode != 200) return [];
 
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -369,10 +388,7 @@ class PtvRealtimeService {
     );
 
     try {
-      final response = await _client.get(
-        Uri.parse(signedUrl),
-        headers: _defaultHeaders,
-      );
+      final response = await _get(signedUrl);
       if (response.statusCode != 200) return null;
       return json.decode(response.body) as Map<String, dynamic>;
     } catch (_) {

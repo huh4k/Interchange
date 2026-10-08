@@ -194,6 +194,8 @@ class MelbourneGtfsService {
     http.Client? client,
     GtfsProgressCallback? onProgress,
     bool forceRefresh = false,
+    Duration responseTimeout = const Duration(seconds: 10),
+    Duration idleTimeout = const Duration(seconds: 20),
   }) async {
     File? targetFile = localFile;
     targetFile ??= await getLocalStopsFile(mode);
@@ -220,7 +222,7 @@ class MelbourneGtfsService {
         request.headers['If-None-Match'] = savedEtag;
       }
 
-      final streamedResponse = await httpClient.send(request);
+      final streamedResponse = await httpClient.send(request).timeout(responseTimeout);
 
       if (streamedResponse.statusCode == 304) {
         // Repo is unchanged: load from local cache
@@ -241,6 +243,7 @@ class MelbourneGtfsService {
           etagFile: etagFile,
           mode: mode,
           onProgress: onProgress,
+          idleTimeout: idleTimeout,
         );
         return stations;
       }
@@ -273,6 +276,7 @@ class MelbourneGtfsService {
     File? etagFile,
     PtvMode mode = PtvMode.metroTrain,
     GtfsProgressCallback? onProgress,
+    Duration idleTimeout = const Duration(seconds: 20),
   }) async {
     File? tempFile;
     IOSink? sink;
@@ -298,7 +302,7 @@ class MelbourneGtfsService {
       int downloaded = 0;
       final modeLabel = mode == PtvMode.metroTram ? 'Tram' : 'Metro';
 
-      await for (final chunk in streamedResponse.stream) {
+      await for (final chunk in streamedResponse.stream.timeout(idleTimeout)) {
         sink?.add(chunk);
         lineController.add(chunk);
         downloaded += chunk.length;

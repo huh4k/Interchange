@@ -45,6 +45,8 @@ abstract interface class IGtfsRepository {
 class PtvGtfsRepository implements IGtfsRepository {
   final Uri masterZipUrl;
   final http.Client _client;
+  final Duration _zipResponseTimeout;
+  final Duration _zipIdleTimeout;
   final PtvRealtimeService _realtimeService;
 
   List<int>? _cachedMasterBytes;
@@ -52,6 +54,8 @@ class PtvGtfsRepository implements IGtfsRepository {
   PtvGtfsRepository({
     required this.masterZipUrl,
     http.Client? client,
+    this._zipResponseTimeout = const Duration(seconds: 30),
+    this._zipIdleTimeout = const Duration(seconds: 60),
     PtvRealtimeService? realtimeService,
   })  : _client = client ?? http.Client(),
         _realtimeService =
@@ -710,7 +714,7 @@ class PtvGtfsRepository implements IGtfsRepository {
   Future<List<int>> _fetchMasterZip({GtfsProgressCallback? onProgress}) async {
     onProgress?.call(0.05, 'Connecting to PTV Feed... 5%');
     final request = http.Request('GET', masterZipUrl);
-    final streamedResponse = await _client.send(request);
+    final streamedResponse = await _client.send(request).timeout(_zipResponseTimeout);
     if (streamedResponse.statusCode != 200) {
       throw HttpException(
         'Failed to download GTFS feed (HTTP ${streamedResponse.statusCode})',
@@ -721,7 +725,7 @@ class PtvGtfsRepository implements IGtfsRepository {
     final builder = BytesBuilder(copy: false);
     int downloaded = 0;
 
-    await for (final chunk in streamedResponse.stream) {
+    await for (final chunk in streamedResponse.stream.timeout(_zipIdleTimeout)) {
       builder.add(chunk);
       downloaded += chunk.length;
       if (contentLength > 0 && onProgress != null) {
