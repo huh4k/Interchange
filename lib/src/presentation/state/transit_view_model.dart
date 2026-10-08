@@ -283,6 +283,11 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
   List<Station> get favoriteStations => _favoriteStations;
   List<Station> get recentStations => _recentStations;
   Set<String> get favoriteTrips => _favoriteTrips;
+
+  /// Bumped on every favourites change; lets widgets select on a cheap value
+  /// (the favourites collections are mutated in place).
+  int get favoriteStationsVersion => _favoriteStationsVersion;
+  int get favoriteTripsVersion => _favoriteTripsVersion;
   Position? get userPosition => _userPosition;
   bool get isLocating => _isLocating;
   bool get isLoading => _isLoading;

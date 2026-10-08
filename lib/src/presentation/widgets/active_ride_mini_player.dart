@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../state/transit_view_model.dart';
 import 'live_ride_sheet.dart';
@@ -6,20 +7,29 @@ import 'live_ride_sheet.dart';
 /// A compact banner that stays pinned above the navigation bar when a trip
 /// is being tracked, even as the user scrolls or switches tabs.
 class ActiveRideMiniPlayer extends StatelessWidget {
-  final TransitViewModel viewModel;
-
-  const ActiveRideMiniPlayer({super.key, required this.viewModel});
+  const ActiveRideMiniPlayer({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final trip = viewModel.activeTrackedTrip!;
+    // Subscribe only to the few values shown here so GPS fixes that don't move
+    // the stop (and unrelated view-model changes) don't rebuild the banner.
+    final (isActive, destination, currentName, nextName) =
+        context.select<TransitViewModel, (bool, String?, String?, String?)>(
+      (vm) => (
+        vm.isTrackingActive && vm.activeTrackedTrip != null,
+        vm.activeTrackedTrip?.destinationName,
+        vm.currentStopStation?.name,
+        vm.nextStopStation?.name,
+      ),
+    );
+    if (!isActive) return const SizedBox.shrink();
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () => LiveRideSheet.show(context, viewModel),
+          onTap: () => LiveRideSheet.show(context, context.read<TransitViewModel>()),
           borderRadius: BorderRadius.circular(18),
           child: Ink(
             decoration: BoxDecoration(
@@ -68,9 +78,9 @@ class ActiveRideMiniPlayer extends StatelessWidget {
                         ),
                         const SizedBox(height: 1),
                         Text(
-                          'To ${trip.destinationName}'
-                          '${viewModel.currentStopStation?.name != null ? ' • ${viewModel.currentStopStation!.name}' : ''}'
-                          '${viewModel.nextStopStation != null ? ' → ${viewModel.nextStopStation!.name}' : ''}',
+                          'To $destination'
+                          '${currentName != null ? ' • $currentName' : ''}'
+                          '${nextName != null ? ' → $nextName' : ''}',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 12,

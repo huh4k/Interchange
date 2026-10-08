@@ -42,7 +42,31 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final viewModel = context.watch<TransitViewModel>();
+    // Rebuild only when something this screen actually renders changes. Lists
+    // compare by identity (they are replaced, never mutated), favourites by
+    // version, and stations by their key fields (Station == compares id only).
+    // GPS fixes, connection polls and progress ticks are deliberately absent.
+    context.select<TransitViewModel, Object>(
+      (vm) => (
+        vm.selectedNavIndex,
+        vm.activeMode,
+        vm.searchQuery,
+        vm.displayedTrips,
+        vm.alerts,
+        vm.errorMessage,
+        vm.isLoading,
+        vm.favoriteStationsVersion,
+        vm.favoriteTripsVersion,
+        vm.recentStations,
+        vm.stations,
+        vm.selectedStation.id,
+        vm.selectedStation.stopId,
+        vm.selectedStation.name,
+        vm.userPosition,
+        vm.favoriteStationDisruptions,
+      ),
+    );
+    final viewModel = context.read<TransitViewModel>();
     final theme = Theme.of(context);
     if (_searchController.text != viewModel.searchQuery && viewModel.searchQuery.isEmpty) {
       _searchController.clear();
@@ -87,37 +111,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    AppHeaderWidget(
-                      isLoading: viewModel.isLoading,
-                      loadingProgress: viewModel.loadingProgress,
-                      loadingPercentage: viewModel.loadingPercentage,
-                      loadingStatus: viewModel.loadingStatus,
-                      activeMode: viewModel.activeMode,
-                      onRefresh: viewModel.loadData,
-                      onToggleTheme: () {
-                        try {
-                          final themeVm = Provider.of<ThemeViewModel>(context, listen: false);
-                          final isDark = theme.brightness == Brightness.dark;
-                          themeVm.setThemeMode(isDark ? ThemeMode.light : ThemeMode.dark);
-                        } catch (_) {}
-                      },
-                    ),
-                    if (viewModel.isLoading) ...[
-                      const SizedBox(height: 12),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: RepaintBoundary(
-                          child: LinearProgressIndicator(
-                            value: viewModel.loadingProgress > 0.0
-                                ? viewModel.loadingProgress
-                                : null,
-                            backgroundColor: theme.cardColor,
-                            color: AppColors.primaryCyan,
-                            minHeight: 6,
-                          ),
-                        ),
-                      ),
-                    ],
+                    const _HeaderSection(),
                     const SizedBox(height: 16),
 
                     // Mode Slider (Trains / Trams)
@@ -484,11 +478,10 @@ class _HomeScreenState extends State<HomeScreen> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (viewModel.isTrackingActive && viewModel.activeTrackedTrip != null)
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: sideMargin),
-            child: ActiveRideMiniPlayer(viewModel: viewModel),
-          ),
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: sideMargin),
+          child: const ActiveRideMiniPlayer(),
+        ),
         NavigationBar(
           selectedIndex: viewModel.selectedNavIndex,
           onDestinationSelected: viewModel.selectNavIndex,
@@ -520,5 +513,62 @@ class _HomeScreenState extends State<HomeScreen> {
     ),
   ],
 );
+  }
+}
+
+/// App header plus the loading progress bar. Selects only the loading fields so
+/// progress ticks rebuild this small subtree instead of the whole screen.
+class _HeaderSection extends StatelessWidget {
+  const _HeaderSection();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final (isLoading, progress, percentage, status, mode) =
+        context.select<TransitViewModel, (bool, double, int, String, PtvMode)>(
+      (vm) => (
+        vm.isLoading,
+        vm.loadingProgress,
+        vm.loadingPercentage,
+        vm.loadingStatus,
+        vm.activeMode,
+      ),
+    );
+    final viewModel = context.read<TransitViewModel>();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AppHeaderWidget(
+          isLoading: isLoading,
+          loadingProgress: progress,
+          loadingPercentage: percentage,
+          loadingStatus: status,
+          activeMode: mode,
+          onRefresh: viewModel.loadData,
+          onToggleTheme: () {
+            try {
+              final themeVm = Provider.of<ThemeViewModel>(context, listen: false);
+              final isDark = theme.brightness == Brightness.dark;
+              themeVm.setThemeMode(isDark ? ThemeMode.light : ThemeMode.dark);
+            } catch (_) {}
+          },
+        ),
+        if (isLoading) ...[
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: RepaintBoundary(
+              child: LinearProgressIndicator(
+                value: progress > 0.0 ? progress : null,
+                backgroundColor: theme.cardColor,
+                color: AppColors.primaryCyan,
+                minHeight: 6,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
   }
 }
