@@ -149,6 +149,25 @@ class _GatedRepository extends _MockRepository {
       mode == PtvMode.metroTram ? tram.future : train.future;
 }
 
+class _RecordingPtv extends _MockPtvService {
+  final departureStopIds = <String>[];
+  int disruptionCalls = 0;
+
+  @override
+  Future<List<ServiceAlert>> fetchLiveDisruptions() async {
+    disruptionCalls++;
+    return [];
+  }
+
+  @override
+  Future<List<Trip>> fetchDepartures(String stopId,
+      {int routeType = 0, int maxResults = 15, Station? station}) {
+    departureStopIds.add(station?.stopId ?? stopId);
+    return super.fetchDepartures(stopId,
+        routeType: routeType, maxResults: maxResults, station: station);
+  }
+}
+
 class _CountingRepository extends _MockRepository {
   int stopCalls = 0;
 
@@ -341,6 +360,44 @@ void main() {
         await Future<void>.delayed(Duration.zero);
       }
       expect(vm.stations.map((s) => s.id), ['tram_1']);
+    });
+
+    test('alerts and departures start before the stations step finishes', () async {
+      final repo = _GatedRepository();
+      final ptv = _RecordingPtv();
+      final vm = TransitViewModel(repository: repo, ptvService: ptv);
+      addTearDown(vm.dispose);
+      await vm.initFuture;
+
+      final load = vm.loadData();
+      await pumpEventQueue();
+      expect(ptv.disruptionCalls, 1);
+      expect(ptv.departureStopIds, ['1071']);
+      expect(vm.isLoading, isTrue);
+
+      repo.train.complete([_station('1071', 'Flinders Street Station')]);
+      await load;
+      // The speculative request is reused: still exactly one departures call.
+      expect(ptv.departureStopIds, ['1071']);
+      expect(vm.isLoading, isFalse);
+      expect(vm.trips, isNotEmpty);
+    });
+
+    test('a station without a direct PTV id gets no speculative departures call', () async {
+      final repo = _GatedRepository();
+      final ptv = _RecordingPtv();
+      final vm = TransitViewModel(repository: repo, ptvService: ptv);
+      addTearDown(vm.dispose);
+      await vm.initFuture;
+
+      final odd = _station('vic:rail:STL', 'St Albans');
+      final load = vm.loadData(station: odd);
+      await pumpEventQueue();
+      expect(ptv.departureStopIds, isEmpty);
+
+      repo.train.complete([odd]);
+      await load;
+      expect(ptv.departureStopIds, ['vic:rail:STL']);
     });
 
     test('silent refresh reuses the loaded station list', () async {

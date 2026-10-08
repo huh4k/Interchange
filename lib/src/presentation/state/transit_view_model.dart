@@ -627,14 +627,61 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     }
 
     try {
+      final routeType = _activeMode.ptvRouteType; // 0 = Trains, 1 = Trams
+
+      // Disruptions are independent of the station, so start them straight away.
+      Future<List<ServiceAlert>> loadAlerts() async {
+        try {
+          final live = await ptvService.fetchLiveDisruptions();
+          if (live.isNotEmpty) return live;
+        } catch (_) {}
+        try {
+          return await repository.getServiceAlerts();
+        } catch (_) {
+          return <ServiceAlert>[];
+        }
+      }
+
+      final alertsFuture = loadAlerts();
+
+      // Favourites restored by _init can change the default selection.
+      if (station == null) {
+        try {
+          await initFuture;
+        } catch (_) {}
+      }
+      final requestedStation = station ?? _selectedStation;
+
+      Future<List<Trip>> loadLiveTrips(Station s) async {
+        try {
+          return await ptvService.fetchDepartures(
+            s.stopId,
+            station: s,
+            routeType: routeType,
+            maxResults: 30,
+          );
+        } catch (_) {
+          return <Trip>[];
+        }
+      }
+
       // 1. Load GTFS Stations for the active mode from remote-streamed stops.txt
-      // Silent refreshes reuse the station list already loaded for this mode.
+      // Silent refreshes and station taps reuse the list already loaded for this mode.
       // The mode is captured before the await: switchBaseMode can change
       // _activeMode while the stations load is in flight.
       final stationsMode = _activeMode;
       final cachedStops = _stationsByMode[stationsMode];
       final canReuseStations =
           (isSilent || reuseStations) && cachedStops != null && cachedStops.isNotEmpty;
+
+      // When the requested station's PTV id is known offline, start its
+      // departures request now instead of waiting for the stations step.
+      final specId = canReuseStations
+          ? null
+          : ptvService.peekResolvedStopId(requestedStation, routeType: routeType);
+      final Future<List<Trip>>? speculativeTrips =
+          specId != null ? loadLiveTrips(requestedStation) : null;
+
       final dynamicStops = canReuseStations
           ? cachedStops
           : await repository.getStopsForMode(
@@ -649,7 +696,6 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
           ? dynamicStops
           : [MelbourneGtfsService.defaultStationForMode(stationsMode)];
 
-      final requestedStation = station ?? _selectedStation;
       final reqNameClean = requestedStation.normalizedName;
       final currentSelected = stationList.firstWhere(
         (s) =>
@@ -668,33 +714,14 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
 
       // 2. Fetch Live Realtime Departures (Next 1 hour window) and Disruptions directly from PTV API
       updateProgress(0.60, 'Fetching Live Realtime Departures: 60%');
-      // Disruptions and departures are independent, so fetch them concurrently.
-      Future<List<ServiceAlert>> loadAlerts() async {
-        try {
-          final live = await ptvService.fetchLiveDisruptions();
-          if (live.isNotEmpty) return live;
-        } catch (_) {}
-        try {
-          return await repository.getServiceAlerts();
-        } catch (_) {
-          return <ServiceAlert>[];
-        }
-      }
+      final reuseSpeculative = speculativeTrips != null &&
+          (identical(currentSelected, requestedStation) ||
+              specId ==
+                  ptvService.peekResolvedStopId(currentSelected, routeType: routeType));
+      final tripsFuture =
+          reuseSpeculative ? speculativeTrips : loadLiveTrips(currentSelected);
 
-      Future<List<Trip>> loadLiveTrips() async {
-        try {
-          return await ptvService.fetchDepartures(
-            currentSelected.stopId,
-            station: currentSelected,
-            routeType: _activeMode.ptvRouteType, // 0 = Trains, 1 = Trams
-            maxResults: 30,
-          );
-        } catch (_) {
-          return <Trip>[];
-        }
-      }
-
-      final results = await Future.wait<Object>([loadAlerts(), loadLiveTrips()]);
+      final results = await Future.wait<Object>([alertsFuture, tripsFuture]);
       final fetchedAlerts = results[0] as List<ServiceAlert>;
       final livePtvTrips = results[1] as List<Trip>;
 

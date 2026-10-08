@@ -126,13 +126,39 @@ class PtvRealtimeService {
     return '${EnvService.baseUrl}$uriWithDevId&signature=$signature';
   }
 
+  static String _resolverCleanName(Station station) => station.name
+      .toLowerCase()
+      .replaceAll(' railway station', '')
+      .replaceAll(' station', '')
+      .trim();
+
+  /// Whether [stopId] is already a valid PTV API stop id for [routeType], so no
+  /// search request is needed to resolve it.
+  ///
+  /// For tram stops (routeType 1), valid PTV stop IDs are in the 2001-3500 range.
+  /// The 19xx/20xx/22xx rejection is only for metro train GTFS platform IDs.
+  static bool isDirectStopId(String stopId, int routeType) {
+    if (!_numericStopIdRegex.hasMatch(stopId)) return false;
+    final idInt = int.tryParse(stopId) ?? 0;
+    if (routeType == 1) {
+      return idInt >= 2001 && idInt <= 3500;
+    }
+    return !stopId.startsWith('19') &&
+        !stopId.startsWith('20') &&
+        !stopId.startsWith('22');
+  }
+
+  /// Network-free lookup of the stop id [resolveStopIdForStation] would return
+  /// without a search request, or null when a request would be needed.
+  String? peekResolvedStopId(Station station, {int routeType = 0}) {
+    final hit = _resolvedStopIdCache['$routeType:${_resolverCleanName(station)}'];
+    if (hit != null) return hit;
+    return isDirectStopId(station.stopId, routeType) ? station.stopId : null;
+  }
+
   /// Dynamically resolves the official PTV API v3 numeric stop ID for a given station.
   Future<String> resolveStopIdForStation(Station station, {int routeType = 0}) async {
-    final cleanName = station.name
-        .toLowerCase()
-        .replaceAll(' railway station', '')
-        .replaceAll(' station', '')
-        .trim();
+    final cleanName = _resolverCleanName(station);
 
     // Cache key includes routeType to prevent train/tram ID collisions for stations
     // sharing a name (e.g. "Flinders Street" is stop 1071 for trains, 2722 for trams)
@@ -145,22 +171,9 @@ class PtvRealtimeService {
     // For tram stops (routeType 1), valid PTV stop IDs are in the 2001-3418 range.
     // Do NOT apply the 19xx/20xx/22xx rejection that was intended only for metro train
     // GTFS internal platform IDs. For trains (routeType 0), keep the existing guard.
-    if (_numericStopIdRegex.hasMatch(station.stopId)) {
-      final idInt = int.tryParse(station.stopId) ?? 0;
-      bool isValidForMode;
-      if (routeType == 1) {
-        // Tram: all 3-5 digit IDs in the 2001-3500 range are valid PTV API stop IDs
-        isValidForMode = idInt >= 2001 && idInt <= 3500;
-      } else {
-        // Train: reject IDs that look like GTFS internal platform IDs (19xx, 20xx, 22xx prefix)
-        isValidForMode = !station.stopId.startsWith('19') &&
-            !station.stopId.startsWith('20') &&
-            !station.stopId.startsWith('22');
-      }
-      if (isValidForMode) {
-        _resolvedStopIdCache[cacheKey] = station.stopId;
-        return station.stopId;
-      }
+    if (isDirectStopId(station.stopId, routeType)) {
+      _resolvedStopIdCache[cacheKey] = station.stopId;
+      return station.stopId;
     }
 
     if (!EnvService.isConfigured) return station.stopId;
