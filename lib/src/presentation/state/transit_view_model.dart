@@ -157,7 +157,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     _trackingPollingTimer?.cancel();
     _trackingPollingTimer = Timer.periodic(const Duration(seconds: 20), (_) {
       if (!_isDisposed && _isTrackingActive) {
-        refreshUpcomingConnections();
+        refreshUpcomingConnections(showSpinner: false);
       }
     });
   }
@@ -279,12 +279,20 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
 
     notifyListeners();
 
-    await locationService.startLocationTracking(
+    // Don't block the first connections refresh on the (possibly interactive)
+    // location-permission flow.
+    final locationFuture = locationService.startLocationTracking(
       onPositionChanged: handlePositionUpdate,
     );
 
     await refreshUpcomingConnections();
-    _startTrackingPolling();
+    if (_isTrackingActive) _startTrackingPolling();
+
+    await locationFuture;
+    if (!_isTrackingActive) {
+      // Tracking ended while the location service was still starting.
+      await locationService.stopLocationTracking();
+    }
   }
 
   void stopTracking() {
@@ -299,19 +307,35 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
-  Future<void> refreshUpcomingConnections() async {
-    if (_activeTrackedTrip == null || _isRefreshingConnections) return;
+  /// Recomputes connecting services for the tracked trip. Background polls pass
+  /// [showSpinner] false so the sheet doesn't flash a spinner every cycle.
+  Future<void> refreshUpcomingConnections({bool showSpinner = true}) async {
+    if (_activeTrackedTrip == null) return;
+    if (_isRefreshingConnections) {
+      // A poll is already running: reflect it in the UI for a manual refresh.
+      if (showSpinner && !_isLoadingConnections) {
+        _isLoadingConnections = true;
+        notifyListeners();
+      }
+      return;
+    }
     _isRefreshingConnections = true;
-    _isLoadingConnections = true;
-    notifyListeners();
+    if (showSpinner) {
+      _isLoadingConnections = true;
+      notifyListeners();
+    }
 
+    final trackedTrip = _activeTrackedTrip!;
     try {
       final connections = await connectionAdvisor.computeUpcomingConnections(
-        activeTrip: _activeTrackedTrip!,
+        activeTrip: trackedTrip,
         currentOrNextStation: _nextStopStation ?? _onBoardStation ?? _selectedStation,
         allStations: _stations,
       );
-      _upcomingConnections = connections;
+      // Ignore a result that arrives after tracking ended or switched trips.
+      if (identical(_activeTrackedTrip, trackedTrip)) {
+        _upcomingConnections = connections;
+      }
     } catch (_) {
       // Keep existing
     } finally {

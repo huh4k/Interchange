@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gtfs_bindings/schedule.dart' as gtfs;
 import 'package:transit_app/src/data/repositories/gtfs_repository.dart';
+import 'package:transit_app/src/domain/entities/live_connection.dart';
 import 'package:transit_app/src/domain/entities/service.dart';
 import 'package:transit_app/src/domain/entities/station.dart';
 import 'package:transit_app/src/domain/entities/trips.dart';
@@ -11,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:transit_app/src/services/connection_advisor_service.dart';
 import 'package:transit_app/src/services/location_service.dart';
+import 'package:transit_app/src/services/melbourne_gtfs_service.dart' show MelbourneGtfsService;
 import 'package:transit_app/src/services/ptv_rt_service.dart';
 
 class _MockRepository implements IGtfsRepository {
@@ -165,6 +167,35 @@ class _RecordingPtv extends _MockPtvService {
     departureStopIds.add(station?.stopId ?? stopId);
     return super.fetchDepartures(stopId,
         routeType: routeType, maxResults: maxResults, station: station);
+  }
+}
+
+class _SlowLocationService extends LocationService {
+  final Completer<void> startGate = Completer<void>();
+  int stopCalls = 0;
+
+  @override
+  Future<void> startLocationTracking({void Function(Position position)? onPositionChanged}) =>
+      startGate.future;
+
+  @override
+  Future<void> stopLocationTracking() async {
+    stopCalls++;
+  }
+}
+
+class _RecordingAdvisor extends ConnectionAdvisorService {
+  int calls = 0;
+  _RecordingAdvisor() : super(ptvService: _MockPtvService());
+
+  @override
+  Future<Map<String, List<LiveConnection>>> computeUpcomingConnections({
+    required Trip activeTrip,
+    required Station currentOrNextStation,
+    required List<Station> allStations,
+  }) async {
+    calls++;
+    return {};
   }
 }
 
@@ -398,6 +429,44 @@ void main() {
       repo.train.complete([odd]);
       await load;
       expect(ptv.departureStopIds, ['vic:rail:STL']);
+    });
+
+    test('connections refresh does not wait for the location service to start', () async {
+      final location = _SlowLocationService();
+      final advisor = _RecordingAdvisor();
+      final vm = TransitViewModel(
+        repository: _MockRepository(),
+        ptvService: _MockPtvService(),
+        locationService: location,
+        connectionAdvisor: advisor,
+      );
+      addTearDown(vm.dispose);
+      final trip = Trip(
+        tripId: 'trip_x',
+        routeId: 'r',
+        serviceId: 's',
+        headsign: 'X',
+        stops: [
+          ServiceStop(station: MelbourneGtfsService.defaultStation, stopSequence: 1),
+        ],
+        departure: TripDeparture(
+          scheduledTime: DateTime.now(),
+          platform: '1',
+          lineCode: 'X',
+          routeName: 'X',
+          destination: 'X',
+          type: TransitType.metro,
+        ),
+      );
+
+      final start = vm.startTrackingTrip(trip);
+      await pumpEventQueue();
+      expect(advisor.calls, 1); // ran while the location start is still pending
+
+      vm.stopTracking();
+      location.startGate.complete();
+      await start;
+      expect(location.stopCalls, greaterThanOrEqualTo(2)); // stopTracking + post-await cleanup
     });
 
     test('silent refresh reuses the loaded station list', () async {

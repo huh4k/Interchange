@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gtfs_bindings/schedule.dart' as gtfs;
 import 'package:transit_app/src/data/repositories/gtfs_repository.dart';
@@ -7,6 +9,7 @@ import 'package:transit_app/src/domain/entities/transit_route.dart';
 import 'package:transit_app/src/domain/entities/trips.dart';
 import 'package:transit_app/src/domain/value_objects/transfer_feasibility.dart';
 import 'package:transit_app/src/services/connection_advisor_service.dart';
+import 'package:transit_app/src/services/connection_service.dart';
 import 'package:transit_app/src/services/ptv_rt_service.dart';
 
 class _MockPtvServiceForAdvisor extends PtvRealtimeService {
@@ -86,6 +89,72 @@ class _MockPtvServiceForAdvisor extends PtvRealtimeService {
       ),
     ];
   }
+}
+
+class _ProbePtv extends PtvRealtimeService {
+  int inFlight = 0;
+  int maxInFlight = 0;
+  final calls = <String>[];
+  final bool throwSync;
+  final bool empty;
+  _ProbePtv({this.throwSync = false, this.empty = false});
+
+  @override
+  Future<List<Trip>> fetchDepartures(
+    String stopId, {
+    int routeType = 0,
+    int maxResults = 20,
+    Station? station,
+  }) {
+    if (throwSync) throw StateError('sync failure');
+    calls.add(stopId);
+    inFlight++;
+    maxInFlight = math.max(maxInFlight, inFlight);
+    return Future<List<Trip>>.delayed(const Duration(milliseconds: 20), () {
+      inFlight--;
+      if (empty) return <Trip>[];
+      return [
+        Trip(
+          tripId: 'conn_$stopId',
+          routeId: 'r',
+          serviceId: 's',
+          headsign: 'Dest $stopId',
+          departure: TripDeparture(
+            scheduledTime: DateTime.now().add(const Duration(minutes: 10)),
+            platform: '1',
+            lineCode: 'X',
+            routeName: 'X Line',
+            destination: 'Dest $stopId',
+            type: TransitType.metro,
+          ),
+        ),
+      ];
+    });
+  }
+}
+
+class _ProbeRepo implements IGtfsRepository {
+  int inFlight = 0;
+  int maxInFlight = 0;
+  final calls = <String>[];
+
+  @override
+  Future<List<Trip>> getTripsForMode(
+    PtvMode mode, {
+    Station? station,
+    bool forceRefresh = false,
+    GtfsProgressCallback? onProgress,
+  }) async {
+    calls.add(station?.name ?? '');
+    inFlight++;
+    maxInFlight = math.max(maxInFlight, inFlight);
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+    inFlight--;
+    return [];
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
 }
 
 void main() {
@@ -322,6 +391,109 @@ void main() {
       expect(connectionsMap.containsKey('Richmond Station'), isTrue);
       final conns = connectionsMap['Richmond Station']!;
       expect(conns.isNotEmpty, isTrue);
+    });
+
+    group('concurrent interchange fetching', () {
+      Station st(String id, String name) => Station(
+            id: id,
+            stopId: id,
+            name: name,
+            code: id,
+            lat: -37.8,
+            lon: 144.9,
+            suburb: '',
+            zone: 'Zone 1',
+            routes: const [],
+          );
+      final hubs = [
+        st('1071', 'Flinders Street Station'),
+        st('1162', 'Richmond Station'),
+        st('1214', 'South Yarra Station'),
+        st('1036', 'Caulfield Station'),
+        st('1181', 'Southern Cross Station'),
+        st('1155', 'Parliament Station'),
+      ];
+
+      Trip tripOver(List<Station> stations) {
+        final now = DateTime.now();
+        return Trip(
+          tripId: 'active',
+          routeId: 'route_active',
+          serviceId: 'svc',
+          headsign: 'Elsewhere',
+          stops: [
+            for (var i = 0; i < stations.length; i++)
+              ServiceStop(
+                station: stations[i],
+                departureTime: now.add(Duration(minutes: i * 3)),
+                platform: '1',
+                stopSequence: i + 1,
+              ),
+          ],
+          departure: TripDeparture(
+            scheduledTime: now,
+            platform: '1',
+            lineCode: 'FKN',
+            routeName: 'Frankston Line',
+            destination: 'Elsewhere',
+            type: TransitType.metro,
+          ),
+        );
+      }
+
+      test('fetches in parallel (bounded) and keeps stop order', () async {
+        for (final h in hubs) {
+          expect(ConnectionService.isDesignatedInterchange(h), isTrue, reason: h.name);
+        }
+        final ptv = _ProbePtv();
+        final advisor = ConnectionAdvisorService(ptvService: ptv);
+        final map = await advisor.computeUpcomingConnections(
+          activeTrip: tripOver(hubs),
+          currentOrNextStation: hubs.first,
+          allStations: hubs,
+        );
+
+        expect(ptv.maxInFlight, greaterThan(1));
+        expect(ptv.maxInFlight, lessThanOrEqualTo(4));
+        expect(map.keys.toList(), hubs.map((h) => h.name).toList());
+      });
+
+      test('falls back to the static timetable sequentially, only for empty results', () async {
+        final ptv = _ProbePtv(empty: true);
+        final repo = _ProbeRepo();
+        final advisor = ConnectionAdvisorService(ptvService: ptv, repository: repo);
+        await advisor.computeUpcomingConnections(
+          activeTrip: tripOver(hubs),
+          currentOrNextStation: hubs.first,
+          allStations: hubs,
+        );
+        expect(repo.calls, hubs.map((h) => h.name).toList());
+        expect(repo.maxInFlight, 1);
+
+        final liveRepo = _ProbeRepo();
+        await ConnectionAdvisorService(ptvService: _ProbePtv(), repository: liveRepo)
+            .computeUpcomingConnections(
+          activeTrip: tripOver(hubs),
+          currentOrNextStation: hubs.first,
+          allStations: hubs,
+        );
+        expect(liveRepo.calls, isEmpty);
+      });
+
+      test('a fetch that throws synchronously still reaches the fallback', () async {
+        final repo = _ProbeRepo();
+        final advisor = ConnectionAdvisorService(
+          ptvService: _ProbePtv(throwSync: true),
+          repository: repo,
+        );
+        final map = await advisor.computeUpcomingConnections(
+          activeTrip: tripOver(hubs.take(2).toList()),
+          currentOrNextStation: hubs.first,
+          allStations: hubs,
+        );
+        expect(repo.calls.length, 2);
+        expect(map.length, 2);
+      });
     });
   });
 }

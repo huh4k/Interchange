@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import '../data/repositories/gtfs_repository.dart';
 import '../domain/entities/live_connection.dart';
 import '../domain/entities/service.dart';
@@ -8,6 +10,8 @@ import 'connection_service.dart';
 import 'ptv_rt_service.dart';
 
 class ConnectionAdvisorService {
+  static const int _maxConcurrentFetches = 4;
+
   final PtvRealtimeService ptvService;
   final IGtfsRepository? repository;
 
@@ -46,37 +50,60 @@ class ConnectionAdvisorService {
     final upcomingStops = stops.sublist(startIndex);
     final now = DateTime.now();
 
+    // Designated interchange stops ahead, with their index for arrival estimates.
+    final targets = <({int offset, ServiceStop stop})>[];
     for (int i = 0; i < upcomingStops.length; i++) {
-      final stop = upcomingStops[i];
-      final station = stop.station;
-
-      // Only compute live connections for designated interchange stations on the map
-      if (!ConnectionService.isDesignatedInterchange(station)) {
-        continue;
+      if (ConnectionService.isDesignatedInterchange(upcomingStops[i].station)) {
+        targets.add((offset: i, stop: upcomingStops[i]));
       }
+    }
+    if (targets.isEmpty) return results;
+
+    // Live phase: fetch departures for every interchange concurrently (bounded
+    // pool; identical stops share one request) instead of one round trip each.
+    Future<List<Trip>> safeFetch(Station st) async {
+      try {
+        return await ptvService.fetchDepartures(
+          st.stopId,
+          station: st,
+          routeType: activeRouteType,
+          maxResults: 20,
+        );
+      } catch (_) {
+        return const <Trip>[];
+      }
+    }
+
+    final live = List<List<Trip>>.filled(targets.length, const <Trip>[]);
+    final inFlightByStop = <String, Future<List<Trip>>>{};
+    var nextTarget = 0;
+    Future<void> worker() async {
+      while (nextTarget < targets.length) {
+        final k = nextTarget++;
+        final st = targets[k].stop.station;
+        live[k] = await (inFlightByStop['${st.stopId}|${st.name}'] ??= safeFetch(st));
+      }
+    }
+
+    await Future.wait(
+      List.generate(math.min(_maxConcurrentFetches, targets.length), (_) => worker()),
+    );
+
+    // Fallback and grouping phase: sequential, in stop order.
+    for (int k = 0; k < targets.length; k++) {
+      final stop = targets[k].stop;
+      final station = stop.station;
 
       // Estimate train arrival time at this platform
       final arrivalTime = _estimateArrivalTime(
         activeTrip: activeTrip,
         stop: stop,
-        stopOffsetIndex: i,
+        stopOffsetIndex: targets[k].offset,
         baseTime: now,
       );
 
-      // Fetch departures at this upcoming station (Real-time PTV API with Offline GTFS Timetable Fallback)
       try {
-        List<Trip> stationDepartures = [];
-
-        try {
-          stationDepartures = await ptvService.fetchDepartures(
-            station.stopId,
-            station: station,
-            routeType: activeRouteType,
-            maxResults: 20,
-          );
-        } catch (_) {
-          stationDepartures = [];
-        }
+        var stationDepartures = live[k];
 
         // Offline-First Fallback: If network drops, rate limiting (HTTP 429), or empty response occurs,
         // degrade gracefully to static GTFS scheduled timetable data.
@@ -91,7 +118,6 @@ class ConnectionAdvisorService {
             // Keep empty if both fail
           }
         }
-
 
         // Group departures by destination name
         final byDestination = <String, List<Trip>>{};
