@@ -105,4 +105,71 @@ void main() {
     expect(find.text('NEXT STOP'), findsOneWidget);
     expect(find.textContaining('Route Stop Sequence'), findsOneWidget);
   });
+
+  testWidgets('stop list starts at the selected station matched by normalised name', (tester) async {
+    tester.view.physicalSize = const Size(900, 20000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    Station stop(int n) => Station(
+          id: 's$n',
+          stopId: 's$n',
+          name: 'Stop $n Station',
+          code: '',
+          lat: 0,
+          lon: 0,
+          suburb: '',
+          zone: 'Zone 1',
+          routes: const [],
+        );
+    final base = DateTime.now().add(const Duration(minutes: 5));
+    final trip = Trip(
+      tripId: 'long_run',
+      routeId: 'r',
+      serviceId: 's',
+      headsign: 'Stop 40 Station',
+      stops: [
+        for (var n = 1; n <= 40; n++)
+          ServiceStop(
+            station: stop(n),
+            departureTime: base.add(Duration(minutes: n)),
+            platform: '1',
+            stopSequence: n,
+          ),
+      ],
+      departure: TripDeparture(
+        scheduledTime: base,
+        platform: '1',
+        lineCode: 'LNG',
+        routeName: 'Long Line',
+        destination: 'Stop 40 Station',
+        type: TransitType.metro,
+      ),
+    );
+    // Same stop as #20 but with different ids, case and whitespace.
+    const selected = Station(
+      id: 'other',
+      stopId: 'other',
+      name: '  STOP 20   station ',
+      code: '',
+      lat: 0,
+      lon: 0,
+      suburb: '',
+      zone: 'Zone 1',
+      routes: [],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: TripDetailsSheet(trip: trip, selectedStation: selected)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Stop 19 Station'), findsNothing);
+    expect(find.text('Stop 20 Station'), findsWidgets);
+    expect(find.text('Stop 40 Station'), findsWidgets);
+    expect(find.textContaining('Origin Station • Departs'), findsOneWidget);
+    expect(find.textContaining('Terminus • Arrives'), findsOneWidget);
+  });
 }
