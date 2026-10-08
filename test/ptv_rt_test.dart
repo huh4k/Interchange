@@ -92,6 +92,58 @@ void main() {
       expect(await service.fetchPattern('1', 0), isNotNull);
     });
 
+    test('fetchLiveDisruptions shares one request between concurrent callers', () async {
+      final gate = Completer<void>();
+      var requests = 0;
+      final service = PtvRealtimeService(
+        client: MockClient((_) async {
+          requests++;
+          await gate.future;
+          return http.Response(
+            jsonEncode({
+              'disruptions': {
+                'metro_train': [
+                  {'disruption_id': 1, 'title': 'A', 'description': 'd', 'routes': []},
+                ],
+              },
+            }),
+            200,
+          );
+        }),
+      );
+      final a = service.fetchLiveDisruptions();
+      final b = service.fetchLiveDisruptions();
+      gate.complete();
+      expect((await a).length, 1);
+      expect((await b).length, 1);
+      expect(requests, 1);
+      // A follow-up call inside the TTL is served from cache.
+      await service.fetchLiveDisruptions();
+      expect(requests, 1);
+    });
+
+    test('fetchLiveDisruptions keeps only train, tram, V/Line and general buckets', () async {
+      Map<String, dynamic> item(int id) =>
+          {'disruption_id': id, 'title': 'T$id', 'description': 'd', 'routes': []};
+      final service = PtvRealtimeService(
+        client: MockClient((_) async => http.Response(
+              jsonEncode({
+                'disruptions': {
+                  'metro_train': [item(1)],
+                  'metro_tram': [item(2)],
+                  'general': [item(3)],
+                  'regional_train': [item(4)],
+                  'metro_bus': [item(5)],
+                  'regional_coach': [item(6)],
+                },
+              }),
+              200,
+            )),
+      );
+      final alerts = await service.fetchLiveDisruptions();
+      expect(alerts.map((a) => a.id).toSet(), {'1', '2', '3', '4'});
+    });
+
     test('PtvRealtimeService resolves stop ID accurately for Frankston and hubs', () async {
       final ptvService = PtvRealtimeService();
       const frankston = Station(

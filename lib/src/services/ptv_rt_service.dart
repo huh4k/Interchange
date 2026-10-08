@@ -67,6 +67,16 @@ class PtvRealtimeService {
   /// Disruptions change slowly; reuse a recent result across refresh cycles.
   static const Duration _disruptionsTtl = Duration(seconds: 60);
   List<ServiceAlert>? _cachedDisruptions;
+  Future<List<ServiceAlert>>? _disruptionsInFlight;
+
+  /// Disruption buckets the app shows: metro train/tram, V/Line and network-wide
+  /// notices. Bus, coach, ferry and similar buckets are skipped.
+  static const Set<String> _relevantDisruptionModes = {
+    'metro_train',
+    'metro_tram',
+    'regional_train',
+    'general',
+  };
   DateTime? _disruptionsFetchedAt;
 
   static const Map<String, String> _defaultHeaders = {
@@ -211,6 +221,22 @@ class PtvRealtimeService {
       return cached;
     }
 
+    // Share one download between concurrent callers.
+    final inFlight = _disruptionsInFlight;
+    if (inFlight != null) return inFlight;
+
+    final download = _downloadDisruptions();
+    _disruptionsInFlight = download;
+    try {
+      return await download;
+    } finally {
+      if (identical(_disruptionsInFlight, download)) {
+        _disruptionsInFlight = null;
+      }
+    }
+  }
+
+  Future<List<ServiceAlert>> _downloadDisruptions() async {
     final signedUrl = generateSignedUrl('/v3/disruptions');
     try {
       final response = await _get(signedUrl);
@@ -226,6 +252,7 @@ class PtvRealtimeService {
 
       final alerts = <ServiceAlert>[];
       disruptionsObj.forEach((modeKey, list) {
+        if (!_relevantDisruptionModes.contains(modeKey)) return;
         if (list is List) {
           for (final item in list) {
             if (item is Map<String, dynamic>) {

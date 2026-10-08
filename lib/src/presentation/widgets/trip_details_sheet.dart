@@ -61,7 +61,8 @@ class TripDetailsSheet extends StatefulWidget {
 }
 
 class _TripDetailsSheetState extends State<TripDetailsSheet> {
-  final PtvRealtimeService _ptvService = PtvRealtimeService();
+  late final PtvRealtimeService _ptvService =
+      widget.viewModel?.ptvService ?? PtvRealtimeService();
   bool _isLoading = true;
   List<Map<String, dynamic>> _stopsSequence = [];
   List<ServiceStop> _serviceStops = [];

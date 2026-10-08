@@ -81,12 +81,14 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     LocationService? locationService,
     ConnectionAdvisorService? connectionAdvisor,
   })  : ptvService = ptvService ?? PtvRealtimeService(),
-        locationService = locationService ?? LocationService(),
-        connectionAdvisor = connectionAdvisor ??
-            ConnectionAdvisorService(
-              ptvService: ptvService ?? PtvRealtimeService(),
-              repository: repository,
-            ) {
+        locationService = locationService ?? LocationService() {
+    // Built here (not in the initializer list) so the advisor shares this
+    // view model's PtvRealtimeService, including its caches and connection.
+    this.connectionAdvisor = connectionAdvisor ??
+        ConnectionAdvisorService(
+          ptvService: this.ptvService,
+          repository: repository,
+        );
     WidgetsBinding.instance.addObserver(this);
     initFuture = _init();
     _startAutoRefresh();

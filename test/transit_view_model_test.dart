@@ -8,6 +8,7 @@ import 'package:transit_app/src/domain/entities/transit_route.dart';
 import 'package:transit_app/src/presentation/state/transit_view_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:transit_app/src/services/connection_advisor_service.dart';
 import 'package:transit_app/src/services/location_service.dart';
 import 'package:transit_app/src/services/ptv_rt_service.dart';
 
@@ -237,6 +238,28 @@ void main() {
       expect(notified, greaterThan(0));
       expect(viewModel.isFavoriteTrip('x'), isTrue);
       await future;
+    });
+
+    test('connection advisor shares the view model PTV service', () {
+      final ptv = _MockPtvService();
+      final vm = TransitViewModel(repository: _MockRepository(), ptvService: ptv);
+      addTearDown(vm.dispose);
+      expect(identical(vm.ptvService, ptv), isTrue);
+      expect(identical(vm.connectionAdvisor.ptvService, ptv), isTrue);
+
+      final defaultVm = TransitViewModel(repository: _MockRepository());
+      addTearDown(defaultVm.dispose);
+      expect(identical(defaultVm.connectionAdvisor.ptvService, defaultVm.ptvService), isTrue);
+    });
+
+    test('an injected connection advisor is used as-is', () {
+      final advisor = ConnectionAdvisorService(
+        ptvService: _MockPtvService(),
+        repository: _MockRepository(),
+      );
+      final vm = TransitViewModel(repository: _MockRepository(), connectionAdvisor: advisor);
+      addTearDown(vm.dispose);
+      expect(identical(vm.connectionAdvisor, advisor), isTrue);
     });
 
     test('silent refresh reuses the loaded station list', () async {

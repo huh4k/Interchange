@@ -17,13 +17,18 @@ void main() async {
   final themeViewModel = ThemeViewModel(settingsService);
   await themeViewModel.loadTheme();
 
+  // One PTV client shared by the repository, view model and sheets so that
+  // caches and keep-alive connections are reused.
+  final ptvService = PtvRealtimeService();
   final repository = PtvGtfsRepository(
     masterZipUrl: Uri.parse('https://gtfs.ptv.vic.gov.au/gtfs-outbound/gtfs.zip'),
+    realtimeService: ptvService,
   );
 
   runApp(TransitApp(
     repository: repository,
     themeViewModel: themeViewModel,
+    ptvService: ptvService,
   ));
 }
 
