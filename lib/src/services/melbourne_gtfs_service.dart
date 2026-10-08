@@ -346,6 +346,12 @@ class MelbourneGtfsService {
           } catch (_) {}
         }
 
+        // stops.txt changed: drop the stale binary index and in-memory index
+        // so later cache reads cannot serve the old station list.
+        try {
+          await File(p.join(targetFile.parent.path, GtfsIndexEngine.binaryIndexFilename)).delete();
+        } catch (_) {}
+        GtfsIndexEngine.invalidate(targetFile.parent.path);
         try {
           GtfsIndexEngine.getOrCreateIndex(targetFile.parent);
         } catch (_) {}

@@ -18,6 +18,10 @@ class GtfsIndexCache {
 class GtfsIndexEngine {
   static final Map<String, GtfsIndexCache> _indexCache = {};
 
+  /// Drops the in-memory index for [dirPath] so the next lookup rebuilds it
+  /// (used after stops.txt is replaced by a fresh download).
+  static void invalidate(String dirPath) => _indexCache.remove(dirPath);
+
   static final RegExp _newlineRegex = RegExp(r'\r?\n');
   static final RegExp _whitespaceRegex = RegExp(r'\s+');
   static final RegExp _stopCodeRegex = RegExp(r'#\s*(\d+[a-zA-Z]?)');

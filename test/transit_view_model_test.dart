@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gtfs_bindings/schedule.dart' as gtfs;
 import 'package:transit_app/src/data/repositories/gtfs_repository.dart';
@@ -121,6 +122,31 @@ class _GeoRepository extends _MockRepository {
       routes: [],
     ),
   ];
+}
+
+Station _station(String id, String name) => Station(
+      id: id,
+      stopId: id,
+      name: name,
+      code: id,
+      lat: -37.8,
+      lon: 144.9,
+      suburb: 'Melbourne',
+      zone: 'Zone 1',
+      routes: const [],
+    );
+
+class _GatedRepository extends _MockRepository {
+  final Completer<List<Station>> train = Completer();
+  final Completer<List<Station>> tram = Completer();
+
+  @override
+  Future<List<Station>> getStopsForMode(
+    PtvMode mode, {
+    bool forceRefresh = false,
+    GtfsProgressCallback? onProgress,
+  }) =>
+      mode == PtvMode.metroTram ? tram.future : train.future;
 }
 
 class _CountingRepository extends _MockRepository {
@@ -260,6 +286,61 @@ void main() {
       final vm = TransitViewModel(repository: _MockRepository(), connectionAdvisor: advisor);
       addTearDown(vm.dispose);
       expect(identical(vm.connectionAdvisor, advisor), isTrue);
+    });
+
+    test('station taps, resets and mode switches reuse loaded stations', () async {
+      final repo = _CountingRepository();
+      final vm = TransitViewModel(repository: repo, ptvService: _MockPtvService());
+      addTearDown(vm.dispose);
+      Future<void> settle() async {
+        while (vm.isLoading) {
+          await Future<void>.delayed(Duration.zero);
+        }
+      }
+
+      await vm.loadData();
+      expect(repo.stopCalls, 1);
+
+      vm.selectStation(vm.stations.first);
+      await settle();
+      expect(repo.stopCalls, 1);
+
+      vm.resetFilters();
+      await settle();
+      expect(repo.stopCalls, 1);
+
+      vm.switchBaseMode(PtvMode.metroTram);
+      await settle();
+      expect(repo.stopCalls, 2);
+
+      vm.switchBaseMode(PtvMode.metroTrain);
+      await settle();
+      expect(repo.stopCalls, 2);
+
+      await vm.loadData();
+      expect(repo.stopCalls, 3);
+    });
+
+    test('a mode switch during a stations load does not poison the other mode', () async {
+      final repo = _GatedRepository();
+      final vm = TransitViewModel(repository: repo, ptvService: _MockPtvService());
+      addTearDown(vm.dispose);
+
+      final first = vm.loadData();
+      vm.switchBaseMode(PtvMode.metroTram);
+      repo.tram.complete([_station('tram_1', 'Bourke St/Swanston St')]);
+      await Future<void>.delayed(Duration.zero);
+      repo.train.complete([_station('train_1', 'Richmond')]);
+      await first;
+      while (vm.isLoading) {
+        await Future<void>.delayed(Duration.zero);
+      }
+
+      vm.selectStation(vm.stations.first);
+      while (vm.isLoading) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(vm.stations.map((s) => s.id), ['tram_1']);
     });
 
     test('silent refresh reuses the loaded station list', () async {

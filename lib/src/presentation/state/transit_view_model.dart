@@ -72,7 +72,9 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
   int? _disruptionsCacheFavVersion;
   String? _disruptionsCacheStation;
   bool _isRefreshingConnections = false;
-  PtvMode? _stationsLoadedForMode;
+  /// Station lists already loaded per mode. Lists are never mutated in place:
+  /// identity-based memoisation elsewhere depends on that.
+  final Map<PtvMode, List<Station>> _stationsByMode = {};
   late final Future<void> initFuture;
 
   TransitViewModel({
@@ -381,7 +383,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     _trips = [];
     _searchQuery = '';
     notifyListeners();
-    loadData(station: _selectedStation);
+    loadData(station: _selectedStation, reuseStations: true);
   }
   void selectNavIndex(int index) {
     if (_selectedNavIndex != index) {
@@ -399,7 +401,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     _selectedStation = station;
     _saveRecent(station);
     notifyListeners();
-    loadData(station: station);
+    loadData(station: station, reuseStations: true);
   }
 
   /// Fetches departures for a given interchange [station] **without** changing
@@ -515,7 +517,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
   void resetFilters() {
     _searchQuery = '';
     notifyListeners();
-    loadData(station: _selectedStation);
+    loadData(station: _selectedStation, reuseStations: true);
   }
 
   Future<void> toggleFavoriteTrip(String tripId) async {
@@ -588,7 +590,16 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     return result;
   }
 
-  Future<void> loadData({PtvMode? mode, Station? station, bool isSilent = false}) async {
+  /// Loads departures (and stations/alerts) for [station] in the active mode.
+  ///
+  /// Silent refreshes and loads with [reuseStations] set reuse the station list
+  /// already loaded for the mode instead of re-checking stops.txt.
+  Future<void> loadData({
+    PtvMode? mode,
+    Station? station,
+    bool isSilent = false,
+    bool reuseStations = false,
+  }) async {
     final requestId = ++_loadRequestId;
     if (isSilent) _isSilentRefreshing = true;
     if (mode != null) {
@@ -618,21 +629,25 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     try {
       // 1. Load GTFS Stations for the active mode from remote-streamed stops.txt
       // Silent refreshes reuse the station list already loaded for this mode.
+      // The mode is captured before the await: switchBaseMode can change
+      // _activeMode while the stations load is in flight.
+      final stationsMode = _activeMode;
+      final cachedStops = _stationsByMode[stationsMode];
       final canReuseStations =
-          isSilent && _stationsLoadedForMode == _activeMode;
+          (isSilent || reuseStations) && cachedStops != null && cachedStops.isNotEmpty;
       final dynamicStops = canReuseStations
-          ? _stations
+          ? cachedStops
           : await repository.getStopsForMode(
-              _activeMode,
+              stationsMode,
               onProgress: updateProgress,
             );
       if (!canReuseStations && dynamicStops.isNotEmpty) {
-        _stationsLoadedForMode = _activeMode;
+        _stationsByMode[stationsMode] = dynamicStops;
       }
 
       final stationList = dynamicStops.isNotEmpty
           ? dynamicStops
-          : [MelbourneGtfsService.defaultStationForMode(_activeMode)];
+          : [MelbourneGtfsService.defaultStationForMode(stationsMode)];
 
       final requestedStation = station ?? _selectedStation;
       final reqNameClean = requestedStation.normalizedName;
