@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
+import '../core/gtfs_csv.dart';
 import '../core/heavy_work.dart';
 import '../domain/entities/station.dart';
 import '../domain/value_objects/ptv_mode.dart';
@@ -397,7 +398,7 @@ class MelbourneGtfsService {
 
       if (headers == null) {
         final headerLine = line.replaceAll('\uFEFF', '');
-        headers = _parseCsvRow(headerLine);
+        headers = parseGtfsCsvRow(headerLine);
         stopIdIdx = headers.indexOf('stop_id');
         stopNameIdx = headers.indexOf('stop_name');
         stopLatIdx = headers.indexOf('stop_lat');
@@ -410,7 +411,7 @@ class MelbourneGtfsService {
         continue;
       }
 
-      final cols = _parseCsvRow(line);
+      final cols = parseGtfsCsvRow(line);
       if (cols.length <= stopNameIdx) continue;
 
       final rawStopId = stopIdIdx != -1 && cols.length > stopIdIdx ? cols[stopIdIdx] : '';
@@ -492,7 +493,7 @@ class MelbourneGtfsService {
     if (lines.isEmpty) return [fallbackStation];
 
     final headerLine = lines.first.replaceAll('\uFEFF', ''); // Strip BOM
-    final headers = _parseCsvRow(headerLine);
+    final headers = parseGtfsCsvRow(headerLine);
 
     final stopIdIdx = headers.indexOf('stop_id');
     final stopNameIdx = headers.indexOf('stop_name');
@@ -510,7 +511,7 @@ class MelbourneGtfsService {
       final line = lines[i].trim();
       if (line.isEmpty) continue;
 
-      final cols = _parseCsvRow(line);
+      final cols = parseGtfsCsvRow(line);
       if (cols.length <= stopNameIdx) continue;
 
       final rawStopId = stopIdIdx != -1 && cols.length > stopIdIdx ? cols[stopIdIdx] : '';
@@ -594,23 +595,4 @@ class MelbourneGtfsService {
     return name;
   }
 
-  static List<String> _parseCsvRow(String line) {
-    final values = <String>[];
-    final buffer = StringBuffer();
-    bool inQuotes = false;
-
-    for (int i = 0; i < line.length; i++) {
-      final char = line[i];
-      if (char == '"') {
-        inQuotes = !inQuotes;
-      } else if (char == ',' && !inQuotes) {
-        values.add(buffer.toString().trim().replaceAll('"', ''));
-        buffer.clear();
-      } else {
-        buffer.write(char);
-      }
-    }
-    values.add(buffer.toString().trim().replaceAll('"', ''));
-    return values;
-  }
 }

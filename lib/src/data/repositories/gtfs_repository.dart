@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../../core/gtfs_csv.dart';
 import '../../domain/entities/station.dart';
 import '../../domain/entities/service.dart';
 import '../../domain/entities/trips.dart';
@@ -421,14 +422,14 @@ class PtvGtfsRepository implements IGtfsRepository {
     if (await calendarFile.exists()) {
       final lines = (await calendarFile.readAsString()).split(RegExp(r'\r?\n'));
       if (lines.isNotEmpty) {
-        final headers = _parseCsvRow(lines.first);
+        final headers = parseGtfsCsvRow(lines.first);
         final serviceIdIdx = headers.indexOf('service_id');
         final startDateIdx = headers.indexOf('start_date');
         final endDateIdx = headers.indexOf('end_date');
         final weekdayIdx = headers.indexOf(_weekdayColumn(serviceDate.weekday));
 
         for (final line in lines.skip(1)) {
-          final columns = _parseCsvRow(line);
+          final columns = parseGtfsCsvRow(line);
           if (serviceIdIdx == -1 || columns.length <= serviceIdIdx) continue;
           if (weekdayIdx == -1 ||
               columns.length <= weekdayIdx ||
@@ -452,13 +453,13 @@ class PtvGtfsRepository implements IGtfsRepository {
     final lines = (await exceptionsFile.readAsString()).split(RegExp(r'\r?\n'));
     if (lines.isEmpty) return activeServices;
 
-    final headers = _parseCsvRow(lines.first);
+    final headers = parseGtfsCsvRow(lines.first);
     final serviceIdIdx = headers.indexOf('service_id');
     final dateIdx = headers.indexOf('date');
     final exceptionTypeIdx = headers.indexOf('exception_type');
 
     for (final line in lines.skip(1)) {
-      final columns = _parseCsvRow(line);
+      final columns = parseGtfsCsvRow(line);
       if (serviceIdIdx == -1 || dateIdx == -1 || exceptionTypeIdx == -1) {
         continue;
       }
@@ -659,15 +660,16 @@ class PtvGtfsRepository implements IGtfsRepository {
         .transform(utf8.decoder)
         .transform(const LineSplitter());
 
-    await for (final line in lines) {
-      if (line.isEmpty) continue;
-      final row = _parseCsvRow(line);
-      if (headers == null) {
+    await lines.forEach((line) {
+      if (line.isEmpty) return;
+      final row = parseGtfsCsvRow(line);
+      final h = headers;
+      if (h == null) {
         headers = row;
       } else {
-        onRow(headers, row);
+        onRow(h, row);
       }
-    }
+    });
   }
 
   static DateTime _parseGtfsTime(String timeStr, DateTime serviceDate) {
@@ -691,25 +693,6 @@ class PtvGtfsRepository implements IGtfsRepository {
     return DateTime.now().difference(modified) < const Duration(days: 7);
   }
 
-  static List<String> _parseCsvRow(String line) {
-    final values = <String>[];
-    final buffer = StringBuffer();
-    bool inQuotes = false;
-
-    for (int i = 0; i < line.length; i++) {
-      final char = line[i];
-      if (char == '"') {
-        inQuotes = !inQuotes;
-      } else if (char == ',' && !inQuotes) {
-        values.add(buffer.toString().trim().replaceAll('"', ''));
-        buffer.clear();
-      } else {
-        buffer.write(char);
-      }
-    }
-    values.add(buffer.toString().trim().replaceAll('"', ''));
-    return values;
-  }
 
   Future<List<int>> _fetchMasterZip({GtfsProgressCallback? onProgress}) async {
     onProgress?.call(0.05, 'Connecting to PTV Feed... 5%');
