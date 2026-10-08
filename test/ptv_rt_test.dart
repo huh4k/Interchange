@@ -174,6 +174,45 @@ void main() {
       expect(createAppHttpClient(), isA<IOClient>());
     });
 
+    test('pattern requests ask for expand=Stop and yield ordered stops', () async {
+      Uri? url;
+      final now = DateTime.now().toUtc();
+      final service = PtvRealtimeService(
+        client: MockClient((req) async {
+          url = req.url;
+          return http.Response(
+            jsonEncode({
+              'departures': [
+                {
+                  'stop_id': 2,
+                  'departure_sequence': 2,
+                  'scheduled_departure_utc': now.add(const Duration(minutes: 10)).toIso8601String(),
+                  'estimated_departure_utc': now.add(const Duration(minutes: 12)).toIso8601String(),
+                  'platform_number': '4',
+                },
+                {
+                  'stop_id': 1,
+                  'departure_sequence': 1,
+                  'scheduled_departure_utc': now.add(const Duration(minutes: 5)).toIso8601String(),
+                  'platform_number': '1',
+                },
+              ],
+              'stops': {
+                '1': {'stop_id': 1, 'stop_name': 'Alpha Railway Station', 'route_type': 0},
+                '2': {'stop_id': 2, 'stop_name': 'Bravo Railway Station', 'route_type': 0},
+              },
+            }),
+            200,
+          );
+        }),
+      );
+      final stops = await service.fetchPatternStops('99');
+      expect(url!.queryParameters['expand'], 'Stop');
+      expect(stops.map((s) => s.stopSequence), [1, 2]);
+      expect(stops.map((s) => s.platform), ['1', '4']);
+      expect(stops[1].departureTime!.isAfter(stops[0].departureTime!), isTrue);
+    });
+
     test('PtvRealtimeService resolves stop ID accurately for Frankston and hubs', () async {
       final ptvService = PtvRealtimeService();
       const frankston = Station(

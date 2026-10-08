@@ -11,7 +11,7 @@ import 'package:transit_app/src/domain/entities/trips.dart';
 import 'package:transit_app/src/domain/entities/transit_route.dart';
 import 'package:transit_app/src/presentation/state/transit_view_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:geolocator/geolocator.dart';
+import 'package:geolocator/geolocator.dart' show Position;
 import 'package:transit_app/src/services/connection_advisor_service.dart';
 import 'package:transit_app/src/services/location_service.dart';
 import 'package:transit_app/src/services/melbourne_gtfs_service.dart' show MelbourneGtfsService;
@@ -220,6 +220,14 @@ Position _pos(double lat, double lon) => Position(
       speed: 0,
       speedAccuracy: 0,
     );
+
+class _GatedAlertsPtv extends _MockPtvService {
+  final Completer<List<ServiceAlert>> gate;
+  _GatedAlertsPtv(this.gate);
+
+  @override
+  Future<List<ServiceAlert>> fetchLiveDisruptions() => gate.future;
+}
 
 class _CountingRepository extends _MockRepository {
   int stopCalls = 0;
@@ -651,6 +659,35 @@ void main() {
 
       await vm.ensureInitialLoad();
       expect(ptv.departureStopIds, contains('2002'));
+    });
+
+    test('departures are published before slow alerts arrive', () async {
+      final gate = Completer<List<ServiceAlert>>();
+      final ptv = _GatedAlertsPtv(gate);
+      final vm = TransitViewModel(repository: _MockRepository(), ptvService: ptv);
+      addTearDown(vm.dispose);
+      await vm.initFuture;
+
+      final load = vm.loadData();
+      await pumpEventQueue();
+      expect(vm.trips, isNotEmpty);
+      expect(vm.isLoading, isFalse);
+      expect(vm.isLoadingAlerts, isTrue);
+      expect(vm.alerts, isEmpty);
+
+      gate.complete([
+        ServiceAlert(
+          id: 'a1',
+          title: 'Delay',
+          description: 'd',
+          lineCode: 'BEL',
+          timestamp: DateTime.now(),
+          severity: ServiceStatus.disrupted,
+        ),
+      ]);
+      await load;
+      expect(vm.alerts.single.id, 'a1');
+      expect(vm.isLoadingAlerts, isFalse);
     });
 
     test('silent refresh reuses the loaded station list', () async {

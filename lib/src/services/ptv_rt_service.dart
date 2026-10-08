@@ -457,7 +457,7 @@ class PtvRealtimeService {
     if (!EnvService.isConfigured) return null;
 
     final signedUrl = generateSignedUrl(
-      '/v3/pattern/run/$runRef/route_type/$routeType?expand=all',
+      '/v3/pattern/run/$runRef/route_type/$routeType?expand=Stop',
     );
 
     try {

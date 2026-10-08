@@ -703,6 +703,24 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
   /// already loaded for the mode instead of re-checking stops.txt.
   Future<void>? _initialLoad;
 
+  // Alerts load alongside departures but are applied after them, so the list
+  // appears without waiting for the (larger) disruptions feed.
+  int _alertLoadsInFlight = 0;
+
+  static bool _sameAlerts(List<ServiceAlert> a, List<ServiceAlert> b) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].id != b[i].id ||
+          a[i].title != b[i].title ||
+          a[i].description != b[i].description) {
+        return false;
+      }
+    }
+    return true;
+  }
+  bool get isLoadingAlerts => _alertLoadsInFlight > 0;
+
   /// Starts the first data load once; later calls return the same future.
   /// main() calls this before the first frame so loading overlaps theme and UI
   /// startup, and HomeScreen calls it again harmlessly.
@@ -741,6 +759,14 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
       }
     }
 
+    var alertLoadHeld = false;
+    bool releaseAlertLoad() {
+      if (!alertLoadHeld) return false;
+      alertLoadHeld = false;
+      _alertLoadsInFlight--;
+      return true;
+    }
+
     try {
       final routeType = _activeMode.ptvRouteType; // 0 = Trains, 1 = Trams
 
@@ -758,6 +784,10 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
       }
 
       final alertsFuture = loadAlerts();
+      if (!isSilent) {
+        _alertLoadsInFlight++;
+        alertLoadHeld = true;
+      }
 
       // Favourites restored by _init can change the default selection.
       if (station == null) {
@@ -839,9 +869,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
       final tripsFuture =
           reuseSpeculative ? speculativeTrips : loadLiveTrips(currentSelected);
 
-      final results = await Future.wait<Object>([alertsFuture, tripsFuture]);
-      final fetchedAlerts = results[0] as List<ServiceAlert>;
-      final livePtvTrips = results[1] as List<Trip>;
+      final livePtvTrips = await tripsFuture;
 
       final now = DateTime.now();
       final oneHourFromNow = now.add(const Duration(hours: 1));
@@ -885,7 +913,6 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
 
       if (requestId == _loadRequestId && !_isDisposed) {
         _trips = mergedTrips;
-        _alerts = fetchedAlerts;
         _stations = stationList;
         _selectedStation = currentSelected;
         if (!isSilent) {
@@ -898,6 +925,15 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
         if (_autoRefreshTimer != null) _startAutoRefresh();
         notifyListeners();
       }
+
+      // Alerts were requested in parallel; apply them now (usually already done).
+      final fetchedAlerts = await alertsFuture;
+      final released = releaseAlertLoad();
+      if (requestId == _loadRequestId && !_isDisposed) {
+        final changed = !_sameAlerts(fetchedAlerts, _alerts);
+        if (changed) _alerts = fetchedAlerts;
+        if (changed || released) notifyListeners();
+      }
     } catch (e) {
       if (requestId == _loadRequestId && !_isDisposed) {
         if (!isSilent) {
@@ -909,6 +945,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
         }
       }
     } finally {
+      if (releaseAlertLoad() && !_isDisposed) notifyListeners();
       if (isSilent) _isSilentRefreshing = false;
     }
   }
