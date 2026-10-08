@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:archive/archive.dart';
@@ -8,7 +7,9 @@ import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
-import '../../core/gtfs_csv.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
+import '../../core/heavy_work.dart';
+import '../datasources/gtfs_day_timetable.dart';
 import '../../domain/entities/station.dart';
 import '../../domain/entities/service.dart';
 import '../../domain/entities/trips.dart';
@@ -81,6 +82,9 @@ class PtvGtfsRepository implements IGtfsRepository {
 
     if (forceRefresh) _cachedMasterBytes = null;
     _cachedMasterBytes ??= await _fetchMasterZip(onProgress: onProgress);
+    // The files on disk are about to change: drop anything derived from them.
+    clearTimetableCache(modeDir.path);
+    GtfsIndexEngine.invalidate(modeDir.path);
     await _extractModeToDirectory(_cachedMasterBytes!, mode, modeDir);
     onProgress?.call(1.0, 'Network Data Loaded: 100%');
 
@@ -130,6 +134,7 @@ class PtvGtfsRepository implements IGtfsRepository {
   @override
   Future<void> clearCache() async {
     _cachedMasterBytes = null;
+    clearTimetableCache();
     GtfsIndexEngine.clearCache();
     final localStopsFile = await MelbourneGtfsService.getLocalStopsFile();
     if (localStopsFile != null && await localStopsFile.exists()) {
@@ -142,222 +147,232 @@ class PtvGtfsRepository implements IGtfsRepository {
     }
   }
 
+  // One timetable per mode directory per calendar day: building it parses
+  // trips/stop_times/calendars/routes, so it is cached and built off the UI isolate.
+  static final Map<String, GtfsDayTimetable> _dayTimetables = {};
+  static final Map<String, Future<GtfsDayTimetable>> _dayTimetableBuilds = {};
+  static int _timetableGeneration = 0;
+
+  /// Number of timetable builds started (tests assert on caching).
+  @visibleForTesting
+  static int debugTimetableBuildCount = 0;
+
+  /// Drops cached timetables for [path] (or all of them), e.g. after the GTFS
+  /// files on disk are replaced.
+  static void clearTimetableCache([String? path]) {
+    _timetableGeneration++;
+    if (path == null) {
+      _dayTimetables.clear();
+      _dayTimetableBuilds.clear();
+      return;
+    }
+    _dayTimetables.removeWhere((k, _) => k.startsWith('$path|'));
+    _dayTimetableBuilds.removeWhere((k, _) => k.startsWith('$path|'));
+  }
+
+  static String _dayKey(String path, DateTime now) =>
+      '$path|${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
+
+  static Future<GtfsDayTimetable> _dayTimetableFor(String path, DateTime now) {
+    final key = _dayKey(path, now);
+    final cached = _dayTimetables[key];
+    if (cached != null) return Future.value(cached);
+    final inFlight = _dayTimetableBuilds[key];
+    if (inFlight != null) return inFlight;
+
+    // No await between the checks above and registering the build below, so
+    // concurrent callers always share one build.
+    debugTimetableBuildCount++;
+    final generation = _timetableGeneration;
+    late final Future<GtfsDayTimetable> build;
+    build = _buildOffThread(path, now).then((timetable) {
+      if (generation == _timetableGeneration && timetable.totalEntries > 0) {
+        _dayTimetables.removeWhere((k, _) => k.startsWith('$path|') && k != key);
+        _dayTimetables[key] = timetable;
+      }
+      return timetable;
+    }).whenComplete(() {
+      if (identical(_dayTimetableBuilds[key], build)) {
+        _dayTimetableBuilds.remove(key);
+      }
+    });
+    _dayTimetableBuilds[key] = build;
+    return build;
+  }
+
+  /// Static and minimal so the isolate closure captures only plain values.
+  static Future<GtfsDayTimetable> _buildOffThread(String path, DateTime now) {
+    var length = 0;
+    try {
+      final f = File(p.join(path, 'stop_times.txt'));
+      if (f.existsSync()) length = f.lengthSync();
+    } catch (_) {}
+    return runHeavy(length, () => buildDayTimetable(path, now));
+  }
+
+  /// Scheduled trips for [modeDir] today, optionally only those serving
+  /// [targetStation], soonest first (at most 100).
   static Future<List<Trip>> parseTripsFromDirectory(
     Directory modeDir, {
     Station? targetStation,
+    @visibleForTesting DateTime? now,
   }) async {
-    final now = DateTime.now();
-    final activeServices = await _activeServiceDates(modeDir, now);
+    final callNow = now ?? DateTime.now();
+    final timetable = await _dayTimetableFor(modeDir.path, callNow);
+    if (timetable.totalEntries == 0) return [];
 
     final index = await GtfsIndexEngine.getOrCreateIndex(modeDir);
     final stationsById = index.stops;
+    final trips = timetable.trips;
+    final activeServices = timetable.activeServices;
 
-    final allStopTimes = await _parseAllStopTimesMap(modeDir);
-    if (allStopTimes.isEmpty) return [];
+    final hasTarget = targetStation != null && targetStation.stopId.isNotEmpty;
+    final tId = hasTarget ? targetStation.stopId : '';
+    final altId = hasTarget ? targetStation.id : '';
 
-    final targetTripIds = <String>{};
-    if (targetStation != null && targetStation.stopId.isNotEmpty) {
-      final tId = targetStation.stopId;
-      final altId = targetStation.id;
-      allStopTimes.forEach((tripId, entries) {
-        if (entries.any((e) {
-          final parentE = e.stopId.split(':').first.split('#').first.split('_').first;
-          return e.stopId == tId || e.stopId == altId || parentE == tId || parentE == altId;
-        })) {
-          targetTripIds.add(tripId);
-        }
-      });
+    // Candidate trips, in trips.txt order.
+    final List<int> candidateIdx;
+    if (hasTarget) {
+      final union = <int>{
+        ...?timetable.tripIdxByStopKey[tId],
+        ...?timetable.tripIdxByStopKey[altId],
+      }.toList()
+        ..sort();
+      candidateIdx = union;
     } else {
-      targetTripIds.addAll(allStopTimes.keys);
+      candidateIdx = [for (var i = 0; i < trips.length; i++) i];
     }
 
-    if (targetTripIds.isEmpty) return [];
+    bool matchesMain(DayStopTime e) {
+      final parent = stopParentId(e.stopId);
+      return e.stopId == tId || e.stopId == altId || parent == tId || parent == altId;
+    }
 
-    final tripsById = await _parseTripsMap(
-      modeDir,
-      tripIds: targetTripIds,
-      activeServices: activeServices,
-    );
-    if (tripsById.isEmpty) return [];
+    bool matchesFallback(DayStopTime e) {
+      final parent = e.stopId.split(_stopSuffixSplit).first.trim();
+      return e.stopId == tId || e.stopId == altId || parent == tId || parent == altId;
+    }
 
-    final routeIds = tripsById.values.map((trip) => trip.routeId).toSet();
-    final routesById = await _parseRoutesMap(modeDir, routeIds: routeIds);
+    final candidates = <_TripCandidate>[];
+    for (final i in candidateIdx) {
+      if (trips[i].entries.isNotEmpty) candidates.add(_TripCandidate(trips[i]));
+    }
+    if (candidates.isEmpty) return [];
 
-    final scheduledTrips = <Trip>[];
-    final cutoffTime = now.subtract(const Duration(minutes: 1));
-
-    for (final tripId in tripsById.keys) {
-      final tripInfo = tripsById[tripId];
-      final entries = allStopTimes[tripId];
-      if (tripInfo == null || entries == null || entries.isEmpty) continue;
-
-      _GtfsStopTimeEntry? targetEntry;
-      if (targetStation != null && targetStation.stopId.isNotEmpty) {
-        final tId = targetStation.stopId;
-        final altId = targetStation.id;
+    void resolve(
+      _TripCandidate c,
+      bool Function(DayStopTime) matches,
+      DateTime? cutoff,
+      List<_TripCandidate> out,
+    ) {
+      final entries = c.trip.entries;
+      DayStopTime? target;
+      if (hasTarget) {
         for (final e in entries) {
-          final parentE = e.stopId.split(':').first.split('#').first.split('_').first;
-          if (e.stopId == tId || e.stopId == altId || parentE == tId || parentE == altId) {
-            targetEntry = e;
+          if (matches(e)) {
+            target = e;
             break;
           }
         }
       }
-      targetEntry ??= entries.first;
+      target ??= entries.first;
 
-      final serviceDate = activeServices[tripInfo.serviceId] ?? now;
-      final scheduledTime = _parseGtfsTime(
-        targetEntry.departureTime,
-        serviceDate,
-      );
-      if (scheduledTime.isBefore(cutoffTime)) continue;
+      final serviceDate = activeServices[c.trip.serviceId] ?? callNow;
+      final scheduled = _parseGtfsTime(target.departureTime, serviceDate);
+      if (cutoff != null && scheduled.isBefore(cutoff)) return;
+      out.add(c.resolved(target, serviceDate, scheduled));
+    }
 
-      final routeInfo = routesById[tripInfo.routeId];
-      final routeName = routeInfo?.longName ?? '';
-      final lineCode = (routeInfo?.shortName.isNotEmpty == true)
-          ? routeInfo!.shortName
-          : tripInfo.routeId;
-
-      final fullStops = <ServiceStop>[];
-      for (int i = 0; i < entries.length; i++) {
-        final e = entries[i];
-        final stTime = _parseGtfsTime(e.departureTime, serviceDate);
-        final stationObj = _resolveStation(e.stopId, stationsById);
-
-        fullStops.add(
-          ServiceStop(
-            station: stationObj,
-            arrivalTime: stTime,
-            departureTime: stTime,
-            platform: e.platform,
-            stopSequence: i + 1,
-          ),
-        );
+    final cutoff = callNow.subtract(const Duration(minutes: 1));
+    var resolved = <_TripCandidate>[];
+    for (final c in candidates) {
+      resolve(c, matchesMain, cutoff, resolved);
+    }
+    if (resolved.isEmpty) {
+      // Nothing left today: fall back to the soonest services regardless of
+      // time, using the looser stop-id predicate.
+      for (final c in candidates) {
+        resolve(c, matchesFallback, null, resolved);
       }
+    }
 
-      final destinationTerminus = fullStops.isNotEmpty
-          ? fullStops.last.station.name
-          : (tripInfo.headsign.isNotEmpty
-                ? GtfsIndexEngine.normalizeStationName(tripInfo.headsign)
-                : routeName);
+    resolved.sort((a, b) => a.scheduled!.compareTo(b.scheduled!));
+    final top = resolved.take(100);
 
-      final headsign = tripInfo.headsign.isNotEmpty
-          ? GtfsIndexEngine.normalizeStationName(tripInfo.headsign)
-          : destinationTerminus;
+    final stationCache = <String, Station>{};
+    final result = <Trip>[];
+    for (final c in top) {
+      result.add(_buildTrip(c, timetable, stationsById, stationCache));
+    }
+    return result;
+  }
 
-      scheduledTrips.add(
-        Trip(
-          tripId: tripId,
-          routeId: tripInfo.routeId,
-          serviceId: tripInfo.serviceId,
-          headsign: headsign,
-          shortName: routeInfo?.shortName,
-          directionId: tripInfo.directionId,
-          stops: fullStops,
-          departure: TripDeparture(
-            scheduledTime: scheduledTime,
-            platform: targetEntry.platform,
-            lineCode: lineCode,
-            routeName: routeName,
-            destination: destinationTerminus,
-            type: routeInfo?.type ?? TransitType.bus,
-          ),
+  static final RegExp _stopSuffixSplit = RegExp(r'[:#_\-]');
+
+  static Trip _buildTrip(
+    _TripCandidate c,
+    GtfsDayTimetable timetable,
+    Map<String, Station> stationsById,
+    Map<String, Station> stationCache,
+  ) {
+    final tripInfo = c.trip;
+    final entries = tripInfo.entries;
+    final serviceDate = c.serviceDate!;
+    final targetEntry = c.target!;
+
+    final routeInfo = timetable.routesById[tripInfo.routeId];
+    final routeName = routeInfo?.longName ?? '';
+    final lineCode = (routeInfo?.shortName.isNotEmpty == true)
+        ? routeInfo!.shortName
+        : tripInfo.routeId;
+
+    final fullStops = <ServiceStop>[];
+    for (int i = 0; i < entries.length; i++) {
+      final e = entries[i];
+      final stTime = _parseGtfsTime(e.departureTime, serviceDate);
+      final stationObj = stationCache.putIfAbsent(
+        e.stopId,
+        () => _resolveStation(e.stopId, stationsById),
+      );
+
+      fullStops.add(
+        ServiceStop(
+          station: stationObj,
+          arrivalTime: stTime,
+          departureTime: stTime,
+          platform: e.platform,
+          stopSequence: i + 1,
         ),
       );
     }
 
-    scheduledTrips.sort(
-      (a, b) =>
-          a.departure!.scheduledTime.compareTo(b.departure!.scheduledTime),
+    final destinationTerminus = fullStops.isNotEmpty
+        ? fullStops.last.station.name
+        : (tripInfo.headsign.isNotEmpty
+              ? GtfsIndexEngine.normalizeStationName(tripInfo.headsign)
+              : routeName);
+
+    final headsign = tripInfo.headsign.isNotEmpty
+        ? GtfsIndexEngine.normalizeStationName(tripInfo.headsign)
+        : destinationTerminus;
+
+    return Trip(
+      tripId: tripInfo.tripId,
+      routeId: tripInfo.routeId,
+      serviceId: tripInfo.serviceId,
+      headsign: headsign,
+      shortName: routeInfo?.shortName,
+      directionId: tripInfo.directionId,
+      stops: fullStops,
+      departure: TripDeparture(
+        scheduledTime: c.scheduled!,
+        platform: targetEntry.platform,
+        lineCode: lineCode,
+        routeName: routeName,
+        destination: destinationTerminus,
+        type: routeInfo?.type ?? TransitType.bus,
+      ),
     );
-
-    if (scheduledTrips.isEmpty && tripsById.isNotEmpty) {
-      for (final tripId in tripsById.keys) {
-        final tripInfo = tripsById[tripId];
-        final entries = allStopTimes[tripId];
-        if (tripInfo == null || entries == null || entries.isEmpty) continue;
-
-        _GtfsStopTimeEntry? targetEntry;
-        if (targetStation != null && targetStation.stopId.isNotEmpty) {
-          final tId = targetStation.stopId;
-          final altId = targetStation.id;
-          for (final e in entries) {
-            final parentE = e.stopId.split(RegExp(r'[:#_\-]')).first.trim();
-            if (e.stopId == tId || e.stopId == altId || parentE == tId || parentE == altId) {
-              targetEntry = e;
-              break;
-            }
-          }
-        }
-        targetEntry ??= entries.first;
-
-        final serviceDate = activeServices[tripInfo.serviceId] ?? now;
-        final scheduledTime = _parseGtfsTime(
-          targetEntry.departureTime,
-          serviceDate,
-        );
-
-        final routeInfo = routesById[tripInfo.routeId];
-        final routeName = routeInfo?.longName ?? '';
-        final lineCode = (routeInfo?.shortName.isNotEmpty == true)
-            ? routeInfo!.shortName
-            : tripInfo.routeId;
-
-        final fullStops = <ServiceStop>[];
-        for (int i = 0; i < entries.length; i++) {
-          final e = entries[i];
-          final stTime = _parseGtfsTime(e.departureTime, serviceDate);
-          final stationObj = _resolveStation(e.stopId, stationsById);
-
-          fullStops.add(
-            ServiceStop(
-              station: stationObj,
-              arrivalTime: stTime,
-              departureTime: stTime,
-              platform: e.platform,
-              stopSequence: i + 1,
-            ),
-          );
-        }
-
-        final destinationTerminus = fullStops.isNotEmpty
-            ? fullStops.last.station.name
-            : (tripInfo.headsign.isNotEmpty
-                  ? GtfsIndexEngine.normalizeStationName(tripInfo.headsign)
-                  : routeName);
-
-        final headsign = tripInfo.headsign.isNotEmpty
-            ? GtfsIndexEngine.normalizeStationName(tripInfo.headsign)
-            : destinationTerminus;
-
-        scheduledTrips.add(
-          Trip(
-            tripId: tripId,
-            routeId: tripInfo.routeId,
-            serviceId: tripInfo.serviceId,
-            headsign: headsign,
-            shortName: routeInfo?.shortName,
-            directionId: tripInfo.directionId,
-            stops: fullStops,
-            departure: TripDeparture(
-              scheduledTime: scheduledTime,
-              platform: targetEntry.platform,
-              lineCode: lineCode,
-              routeName: routeName,
-              destination: destinationTerminus,
-              type: routeInfo?.type ?? TransitType.bus,
-            ),
-          ),
-        );
-      }
-
-      scheduledTrips.sort(
-        (a, b) =>
-            a.departure!.scheduledTime.compareTo(b.departure!.scheduledTime),
-      );
-    }
-
-    return scheduledTrips.take(100).toList();
   }
 
   static Station _resolveStation(String stopId, Map<String, Station> stationsById) {
@@ -365,7 +380,7 @@ class PtvGtfsRepository implements IGtfsRepository {
       return stationsById[stopId]!;
     }
 
-    final parentId = stopId.split(RegExp(r'[:#_\-]')).first.trim();
+    final parentId = stopId.split(_stopSuffixSplit).first.trim();
     if (stationsById.containsKey(parentId)) {
       return stationsById[parentId]!;
     }
@@ -409,267 +424,6 @@ class PtvGtfsRepository implements IGtfsRepository {
     final stationsList = uniqueByName.values.toList();
     stationsList.sort((a, b) => a.name.compareTo(b.name));
     return stationsList;
-  }
-
-  static Future<Map<String, DateTime>> _activeServiceDates(
-    Directory modeDir,
-    DateTime now,
-  ) async {
-    final serviceDate = DateTime(now.year, now.month, now.day);
-    final activeServices = <String, DateTime>{};
-    final calendarFile = File(p.join(modeDir.path, 'calendar.txt'));
-
-    if (await calendarFile.exists()) {
-      final lines = (await calendarFile.readAsString()).split(RegExp(r'\r?\n'));
-      if (lines.isNotEmpty) {
-        final headers = parseGtfsCsvRow(lines.first);
-        final serviceIdIdx = headers.indexOf('service_id');
-        final startDateIdx = headers.indexOf('start_date');
-        final endDateIdx = headers.indexOf('end_date');
-        final weekdayIdx = headers.indexOf(_weekdayColumn(serviceDate.weekday));
-
-        for (final line in lines.skip(1)) {
-          final columns = parseGtfsCsvRow(line);
-          if (serviceIdIdx == -1 || columns.length <= serviceIdIdx) continue;
-          if (weekdayIdx == -1 ||
-              columns.length <= weekdayIdx ||
-              columns[weekdayIdx] != '1') {
-            continue;
-          }
-
-          final startDate = _dateAt(columns, startDateIdx);
-          final endDate = _dateAt(columns, endDateIdx);
-          if ((startDate == null || !serviceDate.isBefore(startDate)) &&
-              (endDate == null || !serviceDate.isAfter(endDate))) {
-            activeServices[columns[serviceIdIdx]] = serviceDate;
-          }
-        }
-      }
-    }
-
-    final exceptionsFile = File(p.join(modeDir.path, 'calendar_dates.txt'));
-    if (!await exceptionsFile.exists()) return activeServices;
-
-    final lines = (await exceptionsFile.readAsString()).split(RegExp(r'\r?\n'));
-    if (lines.isEmpty) return activeServices;
-
-    final headers = parseGtfsCsvRow(lines.first);
-    final serviceIdIdx = headers.indexOf('service_id');
-    final dateIdx = headers.indexOf('date');
-    final exceptionTypeIdx = headers.indexOf('exception_type');
-
-    for (final line in lines.skip(1)) {
-      final columns = parseGtfsCsvRow(line);
-      if (serviceIdIdx == -1 || dateIdx == -1 || exceptionTypeIdx == -1) {
-        continue;
-      }
-      if (columns.length <= serviceIdIdx ||
-          columns.length <= dateIdx ||
-          columns.length <= exceptionTypeIdx ||
-          _dateAt(columns, dateIdx) != serviceDate) {
-        continue;
-      }
-
-      final serviceId = columns[serviceIdIdx];
-      if (columns[exceptionTypeIdx] == '1') {
-        activeServices[serviceId] = serviceDate;
-      } else if (columns[exceptionTypeIdx] == '2') {
-        activeServices.remove(serviceId);
-      }
-    }
-
-    return activeServices;
-  }
-
-  static String _weekdayColumn(int weekday) => const [
-    'monday',
-    'tuesday',
-    'wednesday',
-    'thursday',
-    'friday',
-    'saturday',
-    'sunday',
-  ][weekday - 1];
-
-  static DateTime? _dateAt(List<String> columns, int index) {
-    if (index == -1 || columns.length <= index || columns[index].length != 8) {
-      return null;
-    }
-
-    final value = columns[index];
-    final year = int.tryParse(value.substring(0, 4));
-    final month = int.tryParse(value.substring(4, 6));
-    final day = int.tryParse(value.substring(6, 8));
-    if (year == null || month == null || day == null) return null;
-    return DateTime(year, month, day);
-  }
-
-  static Future<Map<String, _GtfsRouteInfo>> _parseRoutesMap(
-    Directory modeDir, {
-    Set<String>? routeIds,
-  }) async {
-    final routesFile = File(p.join(modeDir.path, 'routes.txt'));
-    if (!await routesFile.exists()) return {};
-
-    final map = <String, _GtfsRouteInfo>{};
-    int? routeIdIdx;
-    int? shortNameIdx;
-    int? longNameIdx;
-    int? routeTypeIdx;
-
-    await _forEachCsvRow(routesFile, (headers, cols) {
-      routeIdIdx ??= headers.indexOf('route_id');
-      shortNameIdx ??= headers.indexOf('route_short_name');
-      longNameIdx ??= headers.indexOf('route_long_name');
-      routeTypeIdx ??= headers.indexOf('route_type');
-      if (routeIdIdx == -1 || cols.length <= routeIdIdx!) return;
-
-      final routeId = cols[routeIdIdx!];
-      if (routeIds != null && !routeIds.contains(routeId)) return;
-      final shortName = (shortNameIdx != -1 && cols.length > shortNameIdx!)
-          ? cols[shortNameIdx!]
-          : routeId;
-      final longName = (longNameIdx != -1 && cols.length > longNameIdx!)
-          ? cols[longNameIdx!]
-          : shortName;
-      final routeTypeInt = (routeTypeIdx != -1 && cols.length > routeTypeIdx!)
-          ? int.tryParse(cols[routeTypeIdx!]) ?? 3
-          : 3;
-
-      final type = TransitRoute.fromGtfsRouteType(routeTypeInt);
-      map[routeId] = _GtfsRouteInfo(
-        shortName: shortName,
-        longName: longName,
-        type: type,
-      );
-    });
-
-    return map;
-  }
-
-  static Future<Map<String, _GtfsTripInfo>> _parseTripsMap(
-    Directory modeDir, {
-    required Set<String> tripIds,
-    required Map<String, DateTime> activeServices,
-  }) async {
-    final tripsFile = File(p.join(modeDir.path, 'trips.txt'));
-    if (!await tripsFile.exists()) return {};
-
-    final map = <String, _GtfsTripInfo>{};
-    int? routeIdIdx;
-    int? serviceIdIdx;
-    int? tripIdIdx;
-    int? headsignIdx;
-    int? directionIdIdx;
-
-    await _forEachCsvRow(tripsFile, (headers, cols) {
-      routeIdIdx ??= headers.indexOf('route_id');
-      serviceIdIdx ??= headers.indexOf('service_id');
-      tripIdIdx ??= headers.indexOf('trip_id');
-      headsignIdx ??= headers.indexOf('trip_headsign');
-      directionIdIdx ??= headers.indexOf('direction_id');
-      if (tripIdIdx == -1 || cols.length <= tripIdIdx!) return;
-
-      final tripId = cols[tripIdIdx!];
-      if (!tripIds.contains(tripId)) return;
-      final routeId = (routeIdIdx != -1 && cols.length > routeIdIdx!)
-          ? cols[routeIdIdx!]
-          : '';
-      final serviceId = (serviceIdIdx != -1 && cols.length > serviceIdIdx!)
-          ? cols[serviceIdIdx!]
-          : '';
-      if (activeServices.isNotEmpty && !activeServices.containsKey(serviceId)) {
-        return;
-      }
-      final headsign = (headsignIdx != -1 && cols.length > headsignIdx!)
-          ? cols[headsignIdx!]
-          : '';
-      final directionId =
-          (directionIdIdx != -1 && cols.length > directionIdIdx!)
-          ? int.tryParse(cols[directionIdIdx!]) ?? 0
-          : 0;
-
-      map[tripId] = _GtfsTripInfo(
-        routeId: routeId,
-        serviceId: serviceId,
-        headsign: headsign,
-        directionId: directionId,
-      );
-    });
-
-    return map;
-  }
-
-  static Future<Map<String, List<_GtfsStopTimeEntry>>> _parseAllStopTimesMap(
-    Directory modeDir,
-  ) async {
-    final stopTimesFile = File(p.join(modeDir.path, 'stop_times.txt'));
-    if (!await stopTimesFile.exists()) return {};
-
-    final map = <String, List<_GtfsStopTimeEntry>>{};
-    int? tripIdIdx;
-    int? arrivalTimeIdx;
-    int? departureTimeIdx;
-    int? stopIdIdx;
-    int? platformIdx;
-
-    await _forEachCsvRow(stopTimesFile, (headers, cols) {
-      tripIdIdx ??= headers.indexOf('trip_id');
-      arrivalTimeIdx ??= headers.indexOf('arrival_time');
-      departureTimeIdx ??= headers.indexOf('departure_time');
-      stopIdIdx ??= headers.indexOf('stop_id');
-      platformIdx ??= headers.indexOf('platform_code');
-      if (tripIdIdx == -1 || cols.length <= tripIdIdx!) return;
-
-      final tripId = cols[tripIdIdx!];
-      final stopId = (stopIdIdx != -1 && cols.length > stopIdIdx!)
-          ? cols[stopIdIdx!]
-          : '';
-
-      final depTimeStr =
-          (departureTimeIdx != -1 && cols.length > departureTimeIdx!)
-          ? cols[departureTimeIdx!]
-          : ((arrivalTimeIdx != -1 && cols.length > arrivalTimeIdx!)
-                ? cols[arrivalTimeIdx!]
-                : '00:00:00');
-
-      final platform = (platformIdx != -1 && cols.length > platformIdx!)
-          ? cols[platformIdx!]
-          : '';
-
-      map.putIfAbsent(tripId, () => []).add(
-            _GtfsStopTimeEntry(
-              tripId: tripId,
-              stopId: stopId,
-              departureTime: depTimeStr,
-              platform: platform,
-            ),
-          );
-    });
-
-    return map;
-  }
-
-  static Future<void> _forEachCsvRow(
-    File file,
-    void Function(List<String> headers, List<String> row) onRow,
-  ) async {
-    List<String>? headers;
-    final lines = file
-        .openRead()
-        .transform(utf8.decoder)
-        .transform(const LineSplitter());
-
-    await lines.forEach((line) {
-      if (line.isEmpty) return;
-      final row = parseGtfsCsvRow(line);
-      final h = headers;
-      if (h == null) {
-        headers = row;
-      } else {
-        onRow(h, row);
-      }
-    });
   }
 
   static DateTime _parseGtfsTime(String timeStr, DateTime serviceDate) {
@@ -814,42 +568,17 @@ class PtvGtfsRepository implements IGtfsRepository {
   }
 }
 
-class _GtfsRouteInfo {
-  final String shortName;
-  final String longName;
-  final TransitType type;
+class _TripCandidate {
+  final DayTrip trip;
+  DayStopTime? target;
+  DateTime? serviceDate;
+  DateTime? scheduled;
 
-  const _GtfsRouteInfo({
-    required this.shortName,
-    required this.longName,
-    required this.type,
-  });
-}
+  _TripCandidate(this.trip);
 
-class _GtfsTripInfo {
-  final String routeId;
-  final String serviceId;
-  final String headsign;
-  final int directionId;
-
-  const _GtfsTripInfo({
-    required this.routeId,
-    this.serviceId = '',
-    required this.headsign,
-    this.directionId = 0,
-  });
-}
-
-class _GtfsStopTimeEntry {
-  final String tripId;
-  final String stopId;
-  final String departureTime;
-  final String platform;
-
-  const _GtfsStopTimeEntry({
-    required this.tripId,
-    required this.stopId,
-    required this.departureTime,
-    required this.platform,
-  });
+  _TripCandidate resolved(DayStopTime target, DateTime serviceDate, DateTime scheduled) =>
+      _TripCandidate(trip)
+        ..target = target
+        ..serviceDate = serviceDate
+        ..scheduled = scheduled;
 }
