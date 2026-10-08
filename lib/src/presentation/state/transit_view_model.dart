@@ -446,7 +446,8 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     } catch (_) {}
   }
 
-  /// Locates the device GPS coordinates and selects the closest Melbourne station.
+  /// Locates the device and returns the closest station; callers are
+  /// responsible for selecting it.
   Future<Station?> locateNearestStation() async {
     _isLocating = true;
     notifyListeners();
@@ -460,10 +461,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
           _stations,
           maxDistanceMeters: 100000,
         );
-        if (nearest != null) {
-          selectStation(nearest);
-          return nearest;
-        }
+        if (nearest != null) return nearest;
       }
     } catch (_) {
     } finally {
@@ -526,8 +524,8 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     } else {
       _favoriteTrips.add(tripId);
     }
-    await favoriteService.saveFavoriteTrips(_favoriteTrips);
     notifyListeners();
+    await favoriteService.saveFavoriteTrips(Set.of(_favoriteTrips));
   }
 
   bool isFavoriteTrip(String tripId) => _favoriteTrips.contains(tripId);
@@ -540,8 +538,8 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     } else {
       _favoriteStations.add(station);
     }
-    await favoriteService.saveFavorites(_favoriteStations);
     notifyListeners();
+    await favoriteService.saveFavorites(List.of(_favoriteStations));
   }
 
   bool isFavoriteStation(Station station) =>

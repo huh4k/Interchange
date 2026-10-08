@@ -233,13 +233,15 @@ class AppHeaderWidget extends StatelessWidget {
               child: IconButton(
                 onPressed: isLoading ? null : onRefresh,
                 icon: isLoading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.5,
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            AppColors.primaryCyan,
+                    ? const RepaintBoundary(
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              AppColors.primaryCyan,
+                            ),
                           ),
                         ),
                       )

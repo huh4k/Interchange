@@ -86,10 +86,12 @@ class _DisruptionsScreenState extends State<DisruptionsScreen> {
           ),
           IconButton(
             icon: widget.isLoading
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                ? const RepaintBoundary(
+                    child: SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
                   )
                 : const Icon(Icons.refresh_rounded),
             onPressed: widget.isLoading ? null : widget.onRefresh,

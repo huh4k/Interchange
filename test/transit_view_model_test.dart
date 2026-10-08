@@ -7,6 +7,8 @@ import 'package:transit_app/src/domain/entities/trips.dart';
 import 'package:transit_app/src/domain/entities/transit_route.dart';
 import 'package:transit_app/src/presentation/state/transit_view_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:transit_app/src/services/location_service.dart';
 import 'package:transit_app/src/services/ptv_rt_service.dart';
 
 class _MockRepository implements IGtfsRepository {
@@ -81,6 +83,43 @@ class _MockRepository implements IGtfsRepository {
       ),
     ];
   }
+}
+
+class _FixedLocationService extends LocationService {
+  @override
+  Future<Position?> getCurrentPosition() async => Position(
+        longitude: 144.9,
+        latitude: -37.8,
+        timestamp: DateTime.now(),
+        accuracy: 1,
+        altitude: 0,
+        altitudeAccuracy: 0,
+        heading: 0,
+        headingAccuracy: 0,
+        speed: 0,
+        speedAccuracy: 0,
+      );
+}
+
+class _GeoRepository extends _MockRepository {
+  @override
+  Future<List<Station>> getStopsForMode(
+    PtvMode mode, {
+    bool forceRefresh = false,
+    GtfsProgressCallback? onProgress,
+  }) async => [
+    const Station(
+      id: 'st_1',
+      stopId: '101',
+      name: 'Flinders Street',
+      code: 'FSS',
+      lat: -37.8,
+      lon: 144.9,
+      suburb: 'Melbourne',
+      zone: 'Zone 1',
+      routes: [],
+    ),
+  ];
 }
 
 class _CountingRepository extends _MockRepository {
@@ -171,6 +210,33 @@ void main() {
       expect(viewModel.displayedTrips, isEmpty);
       await viewModel.toggleFavoriteTrip('trip_belgrave');
       expect(viewModel.displayedTrips.map((t) => t.tripId), ['trip_belgrave']);
+    });
+
+    test('locateNearestStation returns the station without selecting it', () async {
+      final vm = TransitViewModel(
+        repository: _GeoRepository(),
+        ptvService: _MockPtvService(),
+        locationService: _FixedLocationService(),
+      );
+      addTearDown(vm.dispose);
+      await vm.loadData();
+      final before = vm.selectedStation;
+      final nearest = await vm.locateNearestStation();
+      expect(nearest, isNotNull);
+      expect(nearest!.name, 'Flinders Street');
+      expect(identical(vm.selectedStation, before), isTrue);
+      expect(vm.isLocating, isFalse);
+    });
+
+    test('favorite toggle notifies before persisting completes', () async {
+      var notified = 0;
+      viewModel.addListener(() => notified++);
+      final future = viewModel.toggleFavoriteTrip('x');
+      await viewModel.initFuture;
+      await Future<void>.delayed(Duration.zero);
+      expect(notified, greaterThan(0));
+      expect(viewModel.isFavoriteTrip('x'), isTrue);
+      await future;
     });
 
     test('silent refresh reuses the loaded station list', () async {

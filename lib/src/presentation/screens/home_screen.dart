@@ -114,13 +114,15 @@ class _HomeScreenState extends State<HomeScreen> {
                                   const SizedBox(height: 12),
                                   ClipRRect(
                                     borderRadius: BorderRadius.circular(8),
-                                    child: LinearProgressIndicator(
-                                      value: viewModel.loadingProgress > 0.0
-                                          ? viewModel.loadingProgress
-                                          : null,
-                                      backgroundColor: theme.cardColor,
-                                      color: AppColors.primaryCyan,
-                                      minHeight: 6,
+                                    child: RepaintBoundary(
+                                      child: LinearProgressIndicator(
+                                        value: viewModel.loadingProgress > 0.0
+                                            ? viewModel.loadingProgress
+                                            : null,
+                                        backgroundColor: theme.cardColor,
+                                        color: AppColors.primaryCyan,
+                                        minHeight: 6,
+                                      ),
                                     ),
                                   ),
                                 ],
