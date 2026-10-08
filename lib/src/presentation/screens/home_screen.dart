@@ -74,6 +74,386 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
+    // Built once per HomeScreen build (not per LayoutBuilder pass) so keyboard
+    // inset animations don't rebuild the whole sliver tree.
+    final Widget content = RefreshIndicator(
+        onRefresh: viewModel.loadData,
+        color: AppColors.primaryCyan,
+        child: CustomScrollView(
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.all(20.0),
+              sliver: SliverToBoxAdapter(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    AppHeaderWidget(
+                      isLoading: viewModel.isLoading,
+                      loadingProgress: viewModel.loadingProgress,
+                      loadingPercentage: viewModel.loadingPercentage,
+                      loadingStatus: viewModel.loadingStatus,
+                      activeMode: viewModel.activeMode,
+                      onRefresh: viewModel.loadData,
+                      onToggleTheme: () {
+                        try {
+                          final themeVm = Provider.of<ThemeViewModel>(context, listen: false);
+                          final isDark = theme.brightness == Brightness.dark;
+                          themeVm.setThemeMode(isDark ? ThemeMode.light : ThemeMode.dark);
+                        } catch (_) {}
+                      },
+                    ),
+                    if (viewModel.isLoading) ...[
+                      const SizedBox(height: 12),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: RepaintBoundary(
+                          child: LinearProgressIndicator(
+                            value: viewModel.loadingProgress > 0.0
+                                ? viewModel.loadingProgress
+                                : null,
+                            backgroundColor: theme.cardColor,
+                            color: AppColors.primaryCyan,
+                            minHeight: 6,
+                          ),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+
+                    // Mode Slider (Trains / Trams)
+                    TransitModeSlider(
+                      activeMode: viewModel.activeMode,
+                      onModeChanged: viewModel.switchBaseMode,
+                    ),
+                    const SizedBox(height: 10),
+
+                    // ── Quick Station Strip ─────────────────────
+                    QuickStationStrip(viewModel: viewModel),
+                    const SizedBox(height: 10),
+
+                    // Station Selector Card with Instant Search & Favorite Action
+                    StationSelectorCard(
+                      selectedStation: viewModel.selectedStation,
+                      stations: viewModel.stations,
+                      favoriteStations: viewModel.favoriteStations,
+                      recentStations: viewModel.recentStations,
+                      userPosition: viewModel.userPosition,
+                      activeMode: viewModel.activeMode,
+                      onLocateNearest: viewModel.locateNearestStation,
+                      onStationSelected: viewModel.selectStation,
+                      onToggleFavorite: viewModel.toggleFavoriteStation,
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Search departures/routes for the selected station
+                    TextField(
+                      controller: _searchController,
+                      onChanged: viewModel.updateSearchQuery,
+                      decoration: InputDecoration(
+                        hintText: viewModel.activeMode == PtvMode.metroTram
+                            ? 'Filter tram routes at ${viewModel.selectedStation.name}...'
+                            : 'Filter train lines at ${viewModel.selectedStation.name}...',
+                        prefixIcon: Icon(
+                          viewModel.activeMode == PtvMode.metroTram
+                              ? Icons.tram_rounded
+                              : Icons.search_rounded,
+                          color: viewModel.activeMode == PtvMode.metroTram
+                              ? AppColors.melbourneTram
+                              : null,
+                        ),
+                        suffixIcon: viewModel.searchQuery.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear_rounded),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  viewModel.updateSearchQuery('');
+                                },
+                                tooltip: 'Clear filter',
+                              )
+                            : null,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            if (viewModel.errorMessage != null)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20.0,
+                    vertical: 4.0,
+                  ),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.statusAmber.withAlpha(26),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: AppColors.statusAmber.withAlpha(100),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.warning_amber_rounded,
+                          color: AppColors.statusAmber,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            viewModel.errorMessage!,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: viewModel.loadData,
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+            if (viewModel.alerts.isNotEmpty)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20.0,
+                    vertical: 4.0,
+                  ),
+                  child: AlertBannerWidget(
+                    alert: viewModel.alerts.first,
+                  ),
+                ),
+              ),
+
+            // Saved View: Favorite Stations Section
+            if (isSavedView && viewModel.favoriteStations.isNotEmpty) ...[
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
+                sliver: SliverToBoxAdapter(
+                  child: Text(
+                    'FAVORITE STATIONS',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.0,
+                      color: theme.textTheme.bodySmall?.color?.withAlpha(150),
+                    ),
+                  ),
+                ),
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate((context, index) {
+                    final st = viewModel.favoriteStations[index];
+                    final isSelected = st.name == viewModel.selectedStation.name;
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 8.0),
+                      child: ListTile(
+                        leading: const Icon(
+                          Icons.star_rounded,
+                          color: AppColors.statusAmber,
+                        ),
+                        title: Text(
+                          st.name,
+                          style: TextStyle(
+                            fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                          ),
+                        ),
+                        subtitle: Text(st.zone.isNotEmpty ? st.zone : 'Zone 1'),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.close_rounded, size: 18),
+                          onPressed: () => viewModel.toggleFavoriteStation(st),
+                          tooltip: 'Remove Favorite',
+                        ),
+                        onTap: () {
+                          viewModel.selectStation(st);
+                          viewModel.selectNavIndex(0);
+                        },
+                      ),
+                    );
+                  }, childCount: viewModel.favoriteStations.length),
+                ),
+              ),
+            ],
+
+            // Saved View: Recent Stations Section
+            if (isSavedView && viewModel.recentStations.isNotEmpty) ...[
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
+                sliver: SliverToBoxAdapter(
+                  child: Text(
+                    'RECENT STATIONS',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.0,
+                      color: theme.textTheme.bodySmall?.color?.withAlpha(150),
+                    ),
+                  ),
+                ),
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate((context, index) {
+                    final st = viewModel.recentStations[index];
+                    final isSelected = st.name == viewModel.selectedStation.name;
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 8.0),
+                      child: ListTile(
+                        leading: const Icon(
+                          Icons.history_rounded,
+                          color: AppColors.secondaryIndigo,
+                        ),
+                        title: Text(
+                          st.name,
+                          style: TextStyle(
+                            fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                          ),
+                        ),
+                        subtitle: Text(st.zone.isNotEmpty ? st.zone : 'Zone 1'),
+                        onTap: () {
+                          viewModel.selectStation(st);
+                          viewModel.selectNavIndex(0);
+                        },
+                      ),
+                    );
+                  }, childCount: viewModel.recentStations.length),
+                ),
+              ),
+            ],
+
+            // Section Title Header
+            SliverPadding(
+              padding: const EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 16,
+                bottom: 8,
+              ),
+              sliver: SliverToBoxAdapter(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        isSavedView
+                            ? 'Saved Departures'
+                            : 'Scheduled Departures • ${viewModel.selectedStation.name}',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: theme.cardColor,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: theme.dividerColor.withAlpha(40),
+                        ),
+                      ),
+                      child: Text(
+                        '${displayedTrips.length} trips',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primaryCyan,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            if (viewModel.isLoading)
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) => Card(
+                      margin: const EdgeInsets.only(bottom: 12.0),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          children: [
+                            Container(
+                              height: 20,
+                              color: Colors.white10,
+                            ),
+                            const SizedBox(height: 10),
+                            Container(
+                              height: 14,
+                              color: Colors.white10,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    childCount: 3,
+                  ),
+                ),
+              )
+            else if (displayedTrips.isEmpty)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: EmptyStateWidget(
+                  isSavedView: isSavedView,
+                  onReset: isSavedView
+                      ? () => viewModel.selectNavIndex(0)
+                      : () {
+                          _searchController.clear();
+                          viewModel.resetFilters();
+                        },
+                ),
+              )
+            else
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate((
+                    context,
+                    index,
+                  ) {
+                    final trip = displayedTrips[index];
+                    return TripCardWidget(
+                      trip: trip,
+                      isFavorite: viewModel.isFavoriteTrip(trip.tripId),
+                      hasDisruption: viewModel.hasDisruptionForTrip(trip),
+                      onToggleFavorite: () =>
+                          viewModel.toggleFavoriteTrip(trip.tripId),
+                      onTap: () => TripDetailsSheet.show(
+                        context,
+                        trip: trip,
+                        selectedStation: viewModel.selectedStation,
+                        viewModel: viewModel,
+                      ),
+                    );
+                  }, childCount: displayedTrips.length),
+                ),
+              ),
+          ],
+        ),
+      );
+
     return Scaffold(
       body: SafeArea(
         child: LayoutBuilder(
@@ -84,383 +464,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
             return Padding(
               padding: EdgeInsets.symmetric(horizontal: sideMargin),
-                  child: RefreshIndicator(
-                    onRefresh: viewModel.loadData,
-                    color: AppColors.primaryCyan,
-                    child: CustomScrollView(
-                      slivers: [
-                        SliverPadding(
-                          padding: const EdgeInsets.all(20.0),
-                          sliver: SliverToBoxAdapter(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                AppHeaderWidget(
-                                  isLoading: viewModel.isLoading,
-                                  loadingProgress: viewModel.loadingProgress,
-                                  loadingPercentage: viewModel.loadingPercentage,
-                                  loadingStatus: viewModel.loadingStatus,
-                                  activeMode: viewModel.activeMode,
-                                  onRefresh: viewModel.loadData,
-                                  onToggleTheme: () {
-                                    try {
-                                      final themeVm = Provider.of<ThemeViewModel>(context, listen: false);
-                                      final isDark = theme.brightness == Brightness.dark;
-                                      themeVm.setThemeMode(isDark ? ThemeMode.light : ThemeMode.dark);
-                                    } catch (_) {}
-                                  },
-                                ),
-                                if (viewModel.isLoading) ...[
-                                  const SizedBox(height: 12),
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(8),
-                                    child: RepaintBoundary(
-                                      child: LinearProgressIndicator(
-                                        value: viewModel.loadingProgress > 0.0
-                                            ? viewModel.loadingProgress
-                                            : null,
-                                        backgroundColor: theme.cardColor,
-                                        color: AppColors.primaryCyan,
-                                        minHeight: 6,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                                const SizedBox(height: 16),
-
-                                // Mode Slider (Trains / Trams)
-                                TransitModeSlider(
-                                  activeMode: viewModel.activeMode,
-                                  onModeChanged: viewModel.switchBaseMode,
-                                ),
-                                const SizedBox(height: 10),
-
-                                // ── Quick Station Strip ─────────────────────
-                                QuickStationStrip(viewModel: viewModel),
-                                const SizedBox(height: 10),
-
-                                // Station Selector Card with Instant Search & Favorite Action
-                                StationSelectorCard(
-                                  selectedStation: viewModel.selectedStation,
-                                  stations: viewModel.stations,
-                                  favoriteStations: viewModel.favoriteStations,
-                                  recentStations: viewModel.recentStations,
-                                  userPosition: viewModel.userPosition,
-                                  activeMode: viewModel.activeMode,
-                                  onLocateNearest: viewModel.locateNearestStation,
-                                  onStationSelected: viewModel.selectStation,
-                                  onToggleFavorite: viewModel.toggleFavoriteStation,
-                                ),
-                                const SizedBox(height: 14),
-
-                                // Search departures/routes for the selected station
-                                TextField(
-                                  controller: _searchController,
-                                  onChanged: viewModel.updateSearchQuery,
-                                  decoration: InputDecoration(
-                                    hintText: viewModel.activeMode == PtvMode.metroTram
-                                        ? 'Filter tram routes at ${viewModel.selectedStation.name}...'
-                                        : 'Filter train lines at ${viewModel.selectedStation.name}...',
-                                    prefixIcon: Icon(
-                                      viewModel.activeMode == PtvMode.metroTram
-                                          ? Icons.tram_rounded
-                                          : Icons.search_rounded,
-                                      color: viewModel.activeMode == PtvMode.metroTram
-                                          ? AppColors.melbourneTram
-                                          : null,
-                                    ),
-                                    suffixIcon: viewModel.searchQuery.isNotEmpty
-                                        ? IconButton(
-                                            icon: const Icon(Icons.clear_rounded),
-                                            onPressed: () {
-                                              _searchController.clear();
-                                              viewModel.updateSearchQuery('');
-                                            },
-                                            tooltip: 'Clear filter',
-                                          )
-                                        : null,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-
-                        if (viewModel.errorMessage != null)
-                          SliverToBoxAdapter(
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 20.0,
-                                vertical: 4.0,
-                              ),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 10,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: AppColors.statusAmber.withAlpha(26),
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(
-                                    color: AppColors.statusAmber.withAlpha(100),
-                                  ),
-                                ),
-                                child: Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.warning_amber_rounded,
-                                      color: AppColors.statusAmber,
-                                      size: 20,
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: Text(
-                                        viewModel.errorMessage!,
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ),
-                                    TextButton(
-                                      onPressed: viewModel.loadData,
-                                      child: const Text('Retry'),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-
-                        if (viewModel.alerts.isNotEmpty)
-                          SliverToBoxAdapter(
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 20.0,
-                                vertical: 4.0,
-                              ),
-                              child: AlertBannerWidget(
-                                alert: viewModel.alerts.first,
-                              ),
-                            ),
-                          ),
-
-                        // Saved View: Favorite Stations Section
-                        if (isSavedView && viewModel.favoriteStations.isNotEmpty) ...[
-                          SliverPadding(
-                            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
-                            sliver: SliverToBoxAdapter(
-                              child: Text(
-                                'FAVORITE STATIONS',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 1.0,
-                                  color: theme.textTheme.bodySmall?.color?.withAlpha(150),
-                                ),
-                              ),
-                            ),
-                          ),
-                          SliverPadding(
-                            padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                            sliver: SliverList(
-                              delegate: SliverChildBuilderDelegate((context, index) {
-                                final st = viewModel.favoriteStations[index];
-                                final isSelected = st.name == viewModel.selectedStation.name;
-                                return Card(
-                                  margin: const EdgeInsets.only(bottom: 8.0),
-                                  child: ListTile(
-                                    leading: const Icon(
-                                      Icons.star_rounded,
-                                      color: AppColors.statusAmber,
-                                    ),
-                                    title: Text(
-                                      st.name,
-                                      style: TextStyle(
-                                        fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                                      ),
-                                    ),
-                                    subtitle: Text(st.zone.isNotEmpty ? st.zone : 'Zone 1'),
-                                    trailing: IconButton(
-                                      icon: const Icon(Icons.close_rounded, size: 18),
-                                      onPressed: () => viewModel.toggleFavoriteStation(st),
-                                      tooltip: 'Remove Favorite',
-                                    ),
-                                    onTap: () {
-                                      viewModel.selectStation(st);
-                                      viewModel.selectNavIndex(0);
-                                    },
-                                  ),
-                                );
-                              }, childCount: viewModel.favoriteStations.length),
-                            ),
-                          ),
-                        ],
-
-                        // Saved View: Recent Stations Section
-                        if (isSavedView && viewModel.recentStations.isNotEmpty) ...[
-                          SliverPadding(
-                            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
-                            sliver: SliverToBoxAdapter(
-                              child: Text(
-                                'RECENT STATIONS',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 1.0,
-                                  color: theme.textTheme.bodySmall?.color?.withAlpha(150),
-                                ),
-                              ),
-                            ),
-                          ),
-                          SliverPadding(
-                            padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                            sliver: SliverList(
-                              delegate: SliverChildBuilderDelegate((context, index) {
-                                final st = viewModel.recentStations[index];
-                                final isSelected = st.name == viewModel.selectedStation.name;
-                                return Card(
-                                  margin: const EdgeInsets.only(bottom: 8.0),
-                                  child: ListTile(
-                                    leading: const Icon(
-                                      Icons.history_rounded,
-                                      color: AppColors.secondaryIndigo,
-                                    ),
-                                    title: Text(
-                                      st.name,
-                                      style: TextStyle(
-                                        fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                                      ),
-                                    ),
-                                    subtitle: Text(st.zone.isNotEmpty ? st.zone : 'Zone 1'),
-                                    onTap: () {
-                                      viewModel.selectStation(st);
-                                      viewModel.selectNavIndex(0);
-                                    },
-                                  ),
-                                );
-                              }, childCount: viewModel.recentStations.length),
-                            ),
-                          ),
-                        ],
-
-                        // Section Title Header
-                        SliverPadding(
-                          padding: const EdgeInsets.only(
-                            left: 20,
-                            right: 20,
-                            top: 16,
-                            bottom: 8,
-                          ),
-                          sliver: SliverToBoxAdapter(
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    isSavedView
-                                        ? 'Saved Departures'
-                                        : 'Scheduled Departures • ${viewModel.selectedStation.name}',
-                                    style: theme.textTheme.titleMedium?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: theme.cardColor,
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color: theme.dividerColor.withAlpha(40),
-                                    ),
-                                  ),
-                                  child: Text(
-                                    '${displayedTrips.length} trips',
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                      color: AppColors.primaryCyan,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-
-                        if (viewModel.isLoading)
-                          SliverPadding(
-                            padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                            sliver: SliverList(
-                              delegate: SliverChildBuilderDelegate(
-                                (context, index) => Card(
-                                  margin: const EdgeInsets.only(bottom: 12.0),
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(16.0),
-                                    child: Column(
-                                      children: [
-                                        Container(
-                                          height: 20,
-                                          color: Colors.white10,
-                                        ),
-                                        const SizedBox(height: 10),
-                                        Container(
-                                          height: 14,
-                                          color: Colors.white10,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                childCount: 3,
-                              ),
-                            ),
-                          )
-                        else if (displayedTrips.isEmpty)
-                          SliverFillRemaining(
-                            hasScrollBody: false,
-                            child: EmptyStateWidget(
-                              isSavedView: isSavedView,
-                              onReset: isSavedView
-                                  ? () => viewModel.selectNavIndex(0)
-                                  : () {
-                                      _searchController.clear();
-                                      viewModel.resetFilters();
-                                    },
-                            ),
-                          )
-                        else
-                          SliverPadding(
-                            padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                            sliver: SliverList(
-                              delegate: SliverChildBuilderDelegate((
-                                context,
-                                index,
-                              ) {
-                                final trip = displayedTrips[index];
-                                return TripCardWidget(
-                                  trip: trip,
-                                  isFavorite: viewModel.isFavoriteTrip(trip.tripId),
-                                  hasDisruption: viewModel.hasDisruptionForTrip(trip),
-                                  onToggleFavorite: () =>
-                                      viewModel.toggleFavoriteTrip(trip.tripId),
-                                  onTap: () => TripDetailsSheet.show(
-                                    context,
-                                    trip: trip,
-                                    selectedStation: viewModel.selectedStation,
-                                    viewModel: viewModel,
-                                  ),
-                                );
-                              }, childCount: displayedTrips.length),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
+              child: content,
                 );
               },
             ),

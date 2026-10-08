@@ -117,6 +117,23 @@ void main() {
     expect(find.text('Flinders Street'), findsOneWidget);
   });
 
+  testWidgets('Home content is not rebuilt by keyboard inset changes', (tester) async {
+    await tester.pumpWidget(TransitApp(
+      repository: _EmptyGtfsRepository(),
+      ptvService: _MockPtvService(),
+      themeViewModel: ThemeViewModel(SettingsService()),
+    ));
+    await tester.pumpAndSettle();
+
+    final before = tester.widget<StationSelectorCard>(find.byType(StationSelectorCard));
+    tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+    addTearDown(tester.view.resetViewInsets);
+    await tester.pump();
+    final after = tester.widget<StationSelectorCard>(find.byType(StationSelectorCard));
+
+    expect(identical(before, after), isTrue);
+  });
+
   testWidgets('Disruptions screen is reachable from bottom navigation tab', (tester) async {
     await tester.pumpWidget(TransitApp(
       repository: _EmptyGtfsRepository(),
