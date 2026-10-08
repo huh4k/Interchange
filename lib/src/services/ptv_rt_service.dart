@@ -56,6 +56,66 @@ class EnvService {
   }
 }
 
+/// Parses a PTV `/v3/departures` response body into trips departing between
+/// two minutes ago and one hour after [nowMillis], sorted chronologically.
+///
+/// Top-level so it can run on a background isolate.
+List<Trip> parsePtvDeparturesBody(String body, int nowMillis) {
+  final data = json.decode(body) as Map<String, dynamic>;
+  final deps = data['departures'] as List?;
+  final runs = data['runs'] as Map<String, dynamic>?;
+  final routes = data['routes'] as Map<String, dynamic>?;
+
+  if (deps == null || runs == null || routes == null) return [];
+
+  final now = DateTime.fromMillisecondsSinceEpoch(nowMillis);
+  final windowStart = now.subtract(const Duration(minutes: 2));
+  final windowEnd = now.add(const Duration(hours: 1));
+  final trips = <Trip>[];
+
+  for (final d in deps) {
+    if (d is! Map<String, dynamic>) continue;
+    final runRef = d['run_ref']?.toString() ?? '';
+    final routeId = d['route_id']?.toString() ?? '';
+
+    final run = runs[runRef] as Map<String, dynamic>?;
+    final route = routes[routeId] as Map<String, dynamic>?;
+    if (run == null || route == null) continue;
+
+    // Cheap pre-filter on the same time Trip.fromPtvDeparture will use
+    // (estimated, else scheduled) so out-of-window departures never become Trips.
+    final est = DateTime.tryParse(d['estimated_departure_utc']?.toString() ?? '');
+    final sch = DateTime.tryParse(d['scheduled_departure_utc']?.toString() ?? '');
+    final t = est ?? sch;
+    if (t != null && (!t.isAfter(windowStart) || !t.isBefore(windowEnd))) continue;
+
+    final trip = Trip.fromPtvDeparture(d, run, route);
+    final sched = trip.departure?.scheduledTime;
+    // Filter departures from current time (now - 2m) to 1 hour from now
+    if (sched != null && sched.isAfter(windowStart) && sched.isBefore(windowEnd)) {
+      trips.add(trip);
+    }
+  }
+
+  // Departures are sorted chronologically by departure time (next arriving vehicle first)
+  trips.sort((a, b) {
+    final aTime = a.departure?.scheduledTime ?? now;
+    final bTime = b.departure?.scheduledTime ?? now;
+    final timeComparison = aTime.compareTo(bTime);
+    if (timeComparison != 0) return timeComparison;
+
+    final aLine = a.departure?.lineCode.isNotEmpty == true
+        ? a.departure!.lineCode
+        : a.destinationName;
+    final bLine = b.departure?.lineCode.isNotEmpty == true
+        ? b.departure!.lineCode
+        : b.destinationName;
+    return aLine.toLowerCase().compareTo(bLine.toLowerCase());
+  });
+
+  return trips;
+}
+
 class PtvRealtimeService {
   final http.Client _client;
   final Duration _responseTimeout;
@@ -335,7 +395,7 @@ class PtvRealtimeService {
   Future<List<Trip>> fetchDepartures(
     String stopId, {
     int routeType = 0,
-    int maxResults = 30,
+    int maxResults = 20,
     Station? station,
   }) async {
     if (!EnvService.isConfigured) return [];
@@ -366,58 +426,17 @@ class PtvRealtimeService {
       final response = await _get(signedUrl);
       if (response.statusCode != 200) return [];
 
-      final data = json.decode(response.body) as Map<String, dynamic>;
-      final deps = data['departures'] as List?;
-      final runs = data['runs'] as Map<String, dynamic>?;
-      final routes = data['routes'] as Map<String, dynamic>?;
-
-      if (deps == null || runs == null || routes == null) return [];
-
-      final now = DateTime.now();
-      final oneHourFromNow = now.add(const Duration(hours: 1));
-      final trips = <Trip>[];
-
-      for (final d in deps) {
-        if (d is Map<String, dynamic>) {
-          final runRef = d['run_ref']?.toString() ?? '';
-          final routeId = d['route_id']?.toString() ?? '';
-
-          final run = runs[runRef] as Map<String, dynamic>?;
-          final route = routes[routeId] as Map<String, dynamic>?;
-
-          if (run != null && route != null) {
-            final trip = Trip.fromPtvDeparture(d, run, route);
-            final sched = trip.departure?.scheduledTime;
-            // Filter departures from current time (now - 2m) to 1 hour from now
-            if (sched != null &&
-                sched.isAfter(now.subtract(const Duration(minutes: 2))) &&
-                sched.isBefore(oneHourFromNow)) {
-              trips.add(trip);
-            }
-          }
-        }
-      }
-
-      // Departures are sorted chronologically by departure time (next arriving vehicle first)
-      trips.sort((a, b) {
-        final aTime = a.departure?.scheduledTime ?? now;
-        final bTime = b.departure?.scheduledTime ?? now;
-        final timeComparison = aTime.compareTo(bTime);
-        if (timeComparison != 0) return timeComparison;
-
-        final aLine = a.departure?.lineCode.isNotEmpty == true
-            ? a.departure!.lineCode
-            : a.destinationName;
-        final bLine = b.departure?.lineCode.isNotEmpty == true
-            ? b.departure!.lineCode
-            : b.destinationName;
-        return aLine.toLowerCase().compareTo(bLine.toLowerCase());
-      });
-
-      return trips;
+      return await _decodeDepartures(response.body);
     } catch (_) {
       return [];
     }
+  }
+
+  /// Decodes and filters a departures body, off the UI isolate for big bodies.
+  /// Static so the isolate closure cannot capture `this` (and its HTTP client).
+  static Future<List<Trip>> _decodeDepartures(String body) {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    return runHeavy(body.length, () => parsePtvDeparturesBody(body, nowMs));
   }
 
   Future<Map<String, dynamic>?> fetchPattern(String runRef, int routeType) async {

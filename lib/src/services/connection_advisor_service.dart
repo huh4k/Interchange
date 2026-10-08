@@ -72,7 +72,7 @@ class ConnectionAdvisorService {
             station.stopId,
             station: station,
             routeType: activeRouteType,
-            maxResults: 30,
+            maxResults: 20,
           );
         } catch (_) {
           stationDepartures = [];

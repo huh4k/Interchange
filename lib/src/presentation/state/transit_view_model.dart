@@ -658,7 +658,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
             s.stopId,
             station: s,
             routeType: routeType,
-            maxResults: 30,
+            maxResults: 20,
           );
         } catch (_) {
           return <Trip>[];
