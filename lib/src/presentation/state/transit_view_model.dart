@@ -57,6 +57,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
   String? _errorMessage;
   int _loadRequestId = 0;
   bool _isSilentRefreshing = false;
+  StreamSubscription<Position>? _positionSub;
 
   // Memoised derived lists. Widgets read these getters on every rebuild, so the
   // results are recomputed only when their inputs change.
@@ -120,6 +121,9 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     _isDisposed = true;
     _autoRefreshTimer?.cancel();
     _trackingPollingTimer?.cancel();
+    _positionSub?.cancel();
+    _positionSub = null;
+    if (_isTrackingActive) locationService.stopLocationTracking();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -152,10 +156,48 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  /// Connections are only displayed in the Live Ride sheet, so poll quickly
+  /// while it is open and slowly (just to keep data warm) while it is closed.
+  static const Duration _visiblePollInterval = Duration(seconds: 20);
+  static const Duration _hiddenPollInterval = Duration(seconds: 90);
+
+  int _liveRideViewers = 0;
+  DateTime? _connectionsRefreshedAt;
+  bool get _liveRideVisible => _liveRideViewers > 0;
+
+  /// Called by the Live Ride sheet when it mounts.
+  void liveRideSheetOpened() {
+    if (_isDisposed) return;
+    _liveRideViewers++;
+    if (_liveRideViewers != 1) return;
+    if (_isTrackingActive && _trackingPollingTimer != null) {
+      _startTrackingPolling();
+    }
+    final refreshedAt = _connectionsRefreshedAt;
+    if (_isTrackingActive &&
+        (refreshedAt == null ||
+            DateTime.now().difference(refreshedAt) > _visiblePollInterval)) {
+      // Never refresh synchronously: the sheet builds inside a ListenableBuilder.
+      Future.microtask(() {
+        if (!_isDisposed) refreshUpcomingConnections();
+      });
+    }
+  }
+
+  /// Called by the Live Ride sheet when it is disposed.
+  void liveRideSheetClosed() {
+    if (_isDisposed || _liveRideViewers == 0) return;
+    _liveRideViewers--;
+    if (_liveRideViewers == 0 && _isTrackingActive && _trackingPollingTimer != null) {
+      _startTrackingPolling();
+    }
+  }
+
   /// Starts periodic polling for upcoming connections while tracking a trip.
   void _startTrackingPolling() {
     _trackingPollingTimer?.cancel();
-    _trackingPollingTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+    final interval = _liveRideVisible ? _visiblePollInterval : _hiddenPollInterval;
+    _trackingPollingTimer = Timer.periodic(interval, (_) {
       if (!_isDisposed && _isTrackingActive) {
         refreshUpcomingConnections(showSpinner: false);
       }
@@ -281,9 +323,10 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
 
     // Don't block the first connections refresh on the (possibly interactive)
     // location-permission flow.
-    final locationFuture = locationService.startLocationTracking(
-      onPositionChanged: handlePositionUpdate,
-    );
+    // Single delivery path: the stream feeds handlePositionUpdate once per fix
+    // whether or not the Live Ride sheet is open.
+    _positionSub ??= locationService.positionStream.listen(handlePositionUpdate);
+    final locationFuture = locationService.startLocationTracking();
 
     await refreshUpcomingConnections();
     if (_isTrackingActive) _startTrackingPolling();
@@ -291,6 +334,8 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     await locationFuture;
     if (!_isTrackingActive) {
       // Tracking ended while the location service was still starting.
+      _positionSub?.cancel();
+      _positionSub = null;
       await locationService.stopLocationTracking();
     }
   }
@@ -302,7 +347,10 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     _previousStopStation = null;
     _nextStopStation = null;
     _upcomingConnections = {};
+    _connectionsRefreshedAt = null;
     _stopTrackingPolling();
+    _positionSub?.cancel();
+    _positionSub = null;
     locationService.stopLocationTracking();
     notifyListeners();
   }
@@ -335,6 +383,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
       // Ignore a result that arrives after tracking ended or switched trips.
       if (identical(_activeTrackedTrip, trackedTrip)) {
         _upcomingConnections = connections;
+        _connectionsRefreshedAt = DateTime.now();
       }
     } catch (_) {
       // Keep existing
@@ -372,6 +421,9 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     }
 
     if (closestStation != null) {
+      final oldOn = _onBoardStation;
+      final oldPrev = _previousStopStation;
+      final oldNext = _nextStopStation;
       final stops = _activeTrackedTrip!.stops;
       final curIdx = stops.indexWhere((s) =>
           s.station.id == closestStation!.id ||
@@ -385,7 +437,13 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
       } else {
         _onBoardStation = closestStation;
       }
-      notifyListeners();
+      // GPS fixes arrive constantly but the stop only changes every few
+      // minutes; avoid rebuilding listeners when nothing visible moved.
+      if (!identical(oldOn, _onBoardStation) ||
+          !identical(oldPrev, _previousStopStation) ||
+          !identical(oldNext, _nextStopStation)) {
+        notifyListeners();
+      }
     }
   }
 
@@ -730,7 +788,10 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
       );
 
       // Immediately register the full station list so station selector/search is populated
-      if (requestId == _loadRequestId && !_isDisposed) {
+      if (requestId == _loadRequestId &&
+          !_isDisposed &&
+          (!identical(_stations, stationList) ||
+              !identical(_selectedStation, currentSelected))) {
         _stations = stationList;
         _selectedStation = currentSelected;
         notifyListeners();

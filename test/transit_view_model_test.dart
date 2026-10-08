@@ -199,6 +199,26 @@ class _RecordingAdvisor extends ConnectionAdvisorService {
   }
 }
 
+class _QuietLocationService extends LocationService {
+  @override
+  Future<void> startLocationTracking({void Function(Position position)? onPositionChanged}) async {}
+  @override
+  Future<void> stopLocationTracking() async {}
+}
+
+Position _pos(double lat, double lon) => Position(
+      longitude: lon,
+      latitude: lat,
+      timestamp: DateTime.now(),
+      accuracy: 1,
+      altitude: 0,
+      altitudeAccuracy: 0,
+      heading: 0,
+      headingAccuracy: 0,
+      speed: 0,
+      speedAccuracy: 0,
+    );
+
 class _CountingRepository extends _MockRepository {
   int stopCalls = 0;
 
@@ -467,6 +487,98 @@ void main() {
       location.startGate.complete();
       await start;
       expect(location.stopCalls, greaterThanOrEqualTo(2)); // stopTracking + post-await cleanup
+    });
+
+    group('live ride tracking', () {
+      final a = _station('a', 'Alpha').copyWith(lat: -37.80, lon: 144.90);
+      final b = _station('b', 'Bravo').copyWith(lat: -37.85, lon: 144.95);
+      final c = _station('c', 'Charlie').copyWith(lat: -37.90, lon: 145.00);
+      Trip rideTrip() => Trip(
+            tripId: 'ride',
+            routeId: 'r',
+            serviceId: 's',
+            headsign: 'Charlie',
+            stops: [
+              ServiceStop(station: a, stopSequence: 1),
+              ServiceStop(station: b, stopSequence: 2),
+              ServiceStop(station: c, stopSequence: 3),
+            ],
+            departure: TripDeparture(
+              scheduledTime: DateTime.now(),
+              platform: '1',
+              lineCode: 'X',
+              routeName: 'X',
+              destination: 'Charlie',
+              type: TransitType.metro,
+            ),
+          );
+
+      test('GPS fixes notify only when the stop changes, delivered once', () async {
+        final location = _QuietLocationService();
+        final vm = TransitViewModel(
+          repository: _MockRepository(),
+          ptvService: _MockPtvService(),
+          locationService: location,
+          connectionAdvisor: _RecordingAdvisor(),
+        );
+        addTearDown(vm.dispose);
+        await vm.initFuture;
+        await vm.startTrackingTrip(rideTrip(), initialStation: a);
+
+        var notifies = 0;
+        vm.addListener(() => notifies++);
+        for (var i = 0; i < 3; i++) {
+          location.emitMockPosition(_pos(-37.80, 144.90));
+          await Future<void>.delayed(Duration.zero);
+        }
+        expect(notifies, 0);
+        expect(vm.currentStopStation?.id, 'a');
+
+        location.emitMockPosition(_pos(-37.85, 144.95));
+        await Future<void>.delayed(Duration.zero);
+        expect(notifies, 1);
+        expect(vm.currentStopStation?.id, 'b');
+        expect(vm.previousStopStation?.id, 'a');
+        expect(vm.nextStopStation?.id, 'c');
+      });
+
+      test('silent refresh with unchanged data notifies once', () async {
+        await viewModel.loadData();
+        var notifies = 0;
+        viewModel.addListener(() => notifies++);
+        await viewModel.loadData(isSilent: true);
+        expect(notifies, 1);
+      });
+
+      testWidgets('connections poll every 90s hidden and every 20s while the sheet is open', (tester) async {
+        final advisor = _RecordingAdvisor();
+        final vm = TransitViewModel(
+          repository: _MockRepository(),
+          ptvService: _MockPtvService(),
+          locationService: _QuietLocationService(),
+          connectionAdvisor: advisor,
+        );
+        // Disposed manually below: fake timers must be gone before the test ends.
+
+        await vm.startTrackingTrip(rideTrip(), initialStation: a);
+        final base = advisor.calls;
+
+        await tester.pump(const Duration(seconds: 60));
+        expect(advisor.calls, base); // hidden: nothing before 90s
+        await tester.pump(const Duration(seconds: 31));
+        expect(advisor.calls, base + 1);
+
+        vm.liveRideSheetOpened();
+        await tester.pump(const Duration(seconds: 41));
+        expect(advisor.calls, base + 3); // 20s cadence
+
+        vm.liveRideSheetClosed();
+        final before = advisor.calls;
+        await tester.pump(const Duration(seconds: 60));
+        expect(advisor.calls, before); // back to 90s cadence
+        vm.stopTracking();
+        vm.dispose();
+      });
     });
 
     test('silent refresh reuses the loaded station list', () async {

@@ -1,6 +1,4 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
 import '../../domain/entities/service.dart';
 import '../../domain/entities/station.dart';
 import '../../services/connection_service.dart';
@@ -32,31 +30,20 @@ class LiveRideSheet extends StatefulWidget {
 
 class _LiveRideSheetState extends State<LiveRideSheet> {
   String? _focusedStationName;
-  StreamSubscription<Position>? _locationSubscription;
+  late final TransitViewModel _viewModel = widget.viewModel;
 
   @override
   void initState() {
     super.initState();
-    _initLiveTrackingSubscriptions();
-  }
-
-  void _initLiveTrackingSubscriptions() {
-    // Tightly couple location stream subscription to widget lifecycle so
-    // position events update the ViewModel only when the sheet is visible.
-    _locationSubscription = widget.viewModel.locationService.positionStream
-        .listen((position) {
-          if (mounted) {
-            widget.viewModel.handlePositionUpdate(position);
-          }
-        });
-    // Connection polling is now managed by TransitViewModel._trackingPollingTimer
-    // so it continues even when this sheet is not visible.
+    // GPS fixes reach the view model directly (TransitViewModel owns the single
+    // position subscription); the sheet only tells it that connections are now
+    // on screen so polling can speed up while it is visible.
+    _viewModel.liveRideSheetOpened();
   }
 
   @override
   void dispose() {
-    _locationSubscription?.cancel();
-    _locationSubscription = null;
+    _viewModel.liveRideSheetClosed();
     super.dispose();
   }
 
