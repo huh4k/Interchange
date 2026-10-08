@@ -186,6 +186,65 @@ class MelbourneGtfsService {
     return null;
   }
 
+  /// Stations from the on-disk cache only (no network), or null when there is none.
+  static Future<List<Station>?> loadCachedStops({
+    PtvMode mode = PtvMode.metroTrain,
+    File? localFile,
+  }) async {
+    final targetFile = localFile ?? await getLocalStopsFile(mode);
+    if (targetFile == null) return null;
+    final cached = await _loadCachedStations(targetFile, mode: mode);
+    return (cached != null && cached.isNotEmpty) ? cached : null;
+  }
+
+  /// Checks the remote stops feed with the saved ETag. Returns the new station
+  /// list when the feed changed, or null when it is unchanged or the check
+  /// failed for any reason (this never throws).
+  static Future<List<Station>?> revalidateStops({
+    required PtvMode mode,
+    File? localFile,
+    http.Client? client,
+    Duration responseTimeout = const Duration(seconds: 10),
+    Duration idleTimeout = const Duration(seconds: 20),
+  }) async {
+    try {
+      final targetFile = localFile ?? await getLocalStopsFile(mode);
+      final etagFile = targetFile != null ? _getEtagFile(targetFile) : null;
+      String? savedEtag;
+      if (etagFile != null && await etagFile.exists()) {
+        try {
+          savedEtag = (await etagFile.readAsString()).trim();
+        } catch (_) {}
+      }
+      final hasLocalCache = targetFile != null && await targetFile.exists();
+
+      final request = http.Request('GET', Uri.parse(stopsUrlForMode(mode)));
+      if (savedEtag != null && savedEtag.isNotEmpty && hasLocalCache) {
+        request.headers['If-None-Match'] = savedEtag;
+      }
+      final response = await (client ?? http.Client()).send(request).timeout(responseTimeout);
+
+      if (response.statusCode == 304) {
+        await response.stream.drain<void>();
+        return null;
+      }
+      if (response.statusCode != 200) {
+        await response.stream.drain<void>();
+        return null;
+      }
+      final stations = await _streamAndParseStops(
+        streamedResponse: response,
+        targetFile: targetFile,
+        etagFile: etagFile,
+        mode: mode,
+        idleTimeout: idleTimeout,
+      );
+      return stations.isNotEmpty ? stations : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Streams stops.txt for the given [mode] from remote repository, saves it to local disk, and parses stations.
   /// Uses HTTP ETag conditional headers (If-None-Match) to avoid downloading when repo is unchanged.
   /// Throws [GtfsNetworkException] if network is not connected and no local cache exists.

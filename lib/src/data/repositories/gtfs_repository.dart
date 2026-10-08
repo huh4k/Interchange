@@ -50,6 +50,7 @@ class PtvGtfsRepository implements IGtfsRepository {
   final Duration _zipIdleTimeout;
   final PtvRealtimeService _realtimeService;
 
+  final File Function(PtvMode mode)? _stopsFileFor;
   final Future<Directory> Function() _supportDir;
   final Future<Directory> Function() _tempDir;
 
@@ -70,6 +71,7 @@ class PtvGtfsRepository implements IGtfsRepository {
     this._zipIdleTimeout = const Duration(seconds: 60),
     Future<Directory> Function()? supportDir,
     Future<Directory> Function()? tempDir,
+    this._stopsFileFor,
     PtvRealtimeService? realtimeService,
   })  : _client = client ?? http.Client(),
         _supportDir = supportDir ?? getApplicationSupportDirectory,
@@ -215,18 +217,95 @@ class PtvGtfsRepository implements IGtfsRepository {
     return [];
   }
 
+  // Stations per mode, served from memory after the first load. The disk cache
+  // is revalidated against the remote feed in the background (at most hourly)
+  // so station taps and refreshes never wait on a network check.
+  static const Duration _stopsRevalidateInterval = Duration(hours: 1);
+  final Map<PtvMode, List<Station>> _stopsMemo = {};
+  final Map<PtvMode, DateTime> _stopsRevalidatedAt = {};
+  final Map<PtvMode, Future<List<Station>>> _stopsLoads = {};
+  final Set<PtvMode> _stopsRevalidating = {};
+
   @override
   Future<List<Station>> getStopsForMode(
     PtvMode mode, {
     bool forceRefresh = false,
     GtfsProgressCallback? onProgress,
   }) async {
-    return MelbourneGtfsService.loadOrDownloadStops(
+    if (forceRefresh) {
+      final stations = await MelbourneGtfsService.loadOrDownloadStops(
+        mode: mode,
+        localFile: _stopsFileFor?.call(mode),
+        client: _client,
+        onProgress: onProgress,
+        forceRefresh: true,
+      );
+      _memoiseStops(mode, stations);
+      return stations;
+    }
+
+    final memo = _stopsMemo[mode];
+    if (memo != null) {
+      final last = _stopsRevalidatedAt[mode];
+      if (last == null || DateTime.now().difference(last) > _stopsRevalidateInterval) {
+        _revalidateStopsInBackground(mode);
+      }
+      return memo;
+    }
+
+    final inFlight = _stopsLoads[mode];
+    if (inFlight != null) return inFlight;
+
+    late final Future<List<Station>> load;
+    load = _loadStopsFirstTime(mode, onProgress).whenComplete(() {
+      if (identical(_stopsLoads[mode], load)) _stopsLoads.remove(mode);
+    });
+    _stopsLoads[mode] = load;
+    return load;
+  }
+
+  void _memoiseStops(PtvMode mode, List<Station> stations) {
+    if (stations.isEmpty) return;
+    _stopsMemo[mode] = List.unmodifiable(stations);
+    _stopsRevalidatedAt[mode] = DateTime.now();
+  }
+
+  Future<List<Station>> _loadStopsFirstTime(
+    PtvMode mode,
+    GtfsProgressCallback? onProgress,
+  ) async {
+    final cached = await MelbourneGtfsService.loadCachedStops(
       mode: mode,
+      localFile: _stopsFileFor?.call(mode),
+    );
+    if (cached != null && cached.isNotEmpty) {
+      // Serve the cache now; check for a newer feed without blocking.
+      final stations = List<Station>.unmodifiable(cached);
+      _stopsMemo[mode] = stations;
+      _revalidateStopsInBackground(mode);
+      return stations;
+    }
+
+    final stations = await MelbourneGtfsService.loadOrDownloadStops(
+      mode: mode,
+      localFile: _stopsFileFor?.call(mode),
       client: _client,
       onProgress: onProgress,
-      forceRefresh: forceRefresh,
     );
+    _memoiseStops(mode, stations);
+    return stations;
+  }
+
+  void _revalidateStopsInBackground(PtvMode mode) {
+    if (!_stopsRevalidating.add(mode)) return;
+    _stopsRevalidatedAt[mode] = DateTime.now();
+    MelbourneGtfsService.revalidateStops(
+      mode: mode,
+      localFile: _stopsFileFor?.call(mode),
+      client: _client,
+    ).then((fresh) {
+      if (fresh != null && fresh.isNotEmpty) _memoiseStops(mode, fresh);
+    }).whenComplete(() => _stopsRevalidating.remove(mode));
   }
 
   @override
@@ -236,6 +315,9 @@ class PtvGtfsRepository implements IGtfsRepository {
 
   @override
   Future<void> clearCache() async {
+    _stopsMemo.clear();
+    _stopsRevalidatedAt.clear();
+    _stopsLoads.clear();
     _masterDownload = null;
     _datasetLoads.clear();
     _lastProgress.clear();
