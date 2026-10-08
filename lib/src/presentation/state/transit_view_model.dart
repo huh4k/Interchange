@@ -701,6 +701,13 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
   ///
   /// Silent refreshes and loads with [reuseStations] set reuse the station list
   /// already loaded for the mode instead of re-checking stops.txt.
+  Future<void>? _initialLoad;
+
+  /// Starts the first data load once; later calls return the same future.
+  /// main() calls this before the first frame so loading overlaps theme and UI
+  /// startup, and HomeScreen calls it again harmlessly.
+  Future<void> ensureInitialLoad() => _initialLoad ??= loadData();
+
   Future<void> loadData({
     PtvMode? mode,
     Station? station,

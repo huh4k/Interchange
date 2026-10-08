@@ -30,7 +30,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // Trigger the first data load after the widget tree is built.
-      context.read<TransitViewModel>().loadData();
+      context.read<TransitViewModel>().ensureInitialLoad();
     });
   }
 

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/widgets.dart' show AppLifecycleState;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gtfs_bindings/schedule.dart' as gtfs;
@@ -623,6 +624,33 @@ void main() {
         expect(ptv.departureStopIds.length, afterManual + 1);
         vm.dispose();
       });
+    });
+
+    test('ensureInitialLoad loads once and uses a restored favourite station', () async {
+      SharedPreferences.setMockInitialValues({});
+      final repo = _CountingRepository();
+      final ptv = _RecordingPtv();
+      final vm = TransitViewModel(repository: repo, ptvService: ptv);
+      addTearDown(vm.dispose);
+
+      final a = vm.ensureInitialLoad();
+      final b = vm.ensureInitialLoad();
+      expect(identical(a, b), isTrue);
+      await a;
+      expect(repo.stopCalls, 1);
+    });
+
+    test('the initial load departs from the restored favourite station', () async {
+      final fav = _station('2002', 'Favourite Station');
+      SharedPreferences.setMockInitialValues({
+        'favorite_stations': jsonEncode([fav.toMap()]),
+      });
+      final ptv = _RecordingPtv();
+      final vm = TransitViewModel(repository: _MockRepository(), ptvService: ptv);
+      addTearDown(vm.dispose);
+
+      await vm.ensureInitialLoad();
+      expect(ptv.departureStopIds, contains('2002'));
     });
 
     test('silent refresh reuses the loaded station list', () async {

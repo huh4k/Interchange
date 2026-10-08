@@ -12,11 +12,6 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await EnvService.loadEnv();
 
-  // Build top-level singletons before the widget tree.
-  final settingsService = SettingsService();
-  final themeViewModel = ThemeViewModel(settingsService);
-  await themeViewModel.loadTheme();
-
   // One PTV client shared by the repository, view model and sheets so that
   // caches and keep-alive connections are reused.
   final ptvService = PtvRealtimeService();
@@ -25,10 +20,24 @@ void main() async {
     realtimeService: ptvService,
   );
 
+  // Start the first departures load now so it overlaps the theme load and the
+  // first frame instead of waiting for them.
+  final transitViewModel = TransitViewModel(
+    repository: repository,
+    ptvService: ptvService,
+  );
+  transitViewModel.ensureInitialLoad();
+
+  // Build top-level singletons before the widget tree.
+  final settingsService = SettingsService();
+  final themeViewModel = ThemeViewModel(settingsService);
+  await themeViewModel.loadTheme();
+
   runApp(TransitApp(
     repository: repository,
     themeViewModel: themeViewModel,
     ptvService: ptvService,
+    transitViewModel: transitViewModel,
   ));
 }
 
@@ -36,12 +45,14 @@ class TransitApp extends StatelessWidget {
   final IGtfsRepository? repository;
   final PtvRealtimeService? ptvService;
   final ThemeViewModel? themeViewModel;
+  final TransitViewModel? transitViewModel;
 
   const TransitApp({
     super.key,
     this.repository,
     this.themeViewModel,
     this.ptvService,
+    this.transitViewModel,
   });
 
   @override
@@ -64,12 +75,15 @@ class TransitApp extends StatelessWidget {
         ChangeNotifierProvider<ThemeViewModel>.value(value: effectiveThemeVm),
 
         // Global transit state — persists across navigation and tab switches.
-        ChangeNotifierProvider<TransitViewModel>(
-          create: (_) => TransitViewModel(
-            repository: effectiveRepo,
-            ptvService: ptvService,
+        if (transitViewModel != null)
+          ChangeNotifierProvider<TransitViewModel>.value(value: transitViewModel!)
+        else
+          ChangeNotifierProvider<TransitViewModel>(
+            create: (_) => TransitViewModel(
+              repository: effectiveRepo,
+              ptvService: ptvService,
+            ),
           ),
-        ),
       ],
       child: Consumer<ThemeViewModel>(
         builder: (context, themeVm, _) => MaterialApp(
