@@ -569,6 +569,7 @@ void main() {
         await Future<void>.delayed(Duration.zero);
         expect(vm.currentStopStation?.id, 'a');
         expect(vm.nextStopStation?.id, 'b');
+        expect(vm.isBetweenStops, isTrue);
 
         // Midway B -> C.
         location.emitMockPosition(_pos(-37.875, 144.975));
@@ -576,6 +577,10 @@ void main() {
         expect(vm.currentStopStation?.id, 'b');
         expect(vm.previousStopStation?.id, 'a');
         expect(vm.nextStopStation?.id, 'c');
+
+        location.emitMockPosition(_pos(-37.90, 145.00)); // at C
+        await Future<void>.delayed(Duration.zero);
+        expect(vm.isBetweenStops, isFalse);
       });
 
       test('progress never moves backwards on a noisy fix', () async {

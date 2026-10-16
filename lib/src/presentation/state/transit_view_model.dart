@@ -48,6 +48,9 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
   Station? _onBoardStation;
   /// Index into the tracked trip's stops of the current / last-passed stop.
   int _rideIndex = 0;
+  /// True when the rider is at [_onBoardStation]; false when travelling past it
+  /// towards [_nextStopStation].
+  bool _atStop = true;
   Station? _previousStopStation;
   Station? _nextStopStation;
   bool _isTrackingActive = false;
@@ -303,6 +306,9 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
   Trip? get activeTrackedTrip => _activeTrackedTrip;
   Station? get onBoardStation => _onBoardStation;
   Station? get currentStopStation => _onBoardStation;
+  /// True while the train is travelling between [currentStopStation] (last stop
+  /// passed) and [nextStopStation]; false when at a stop.
+  bool get isBetweenStops => _isTrackingActive && !_atStop && _nextStopStation != null;
   Station? get previousStopStation => _previousStopStation;
   Station? get nextStopStation => _nextStopStation;
   bool get isTrackingActive => _isTrackingActive;
@@ -333,6 +339,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
 
     final stops = activeTrip.stops;
     _rideIndex = 0;
+    _atStop = true;
     _previousStopStation = null;
     _nextStopStation = null;
     if (stops.isNotEmpty) {
@@ -350,6 +357,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
         });
         if (nextIdx != -1) {
           _rideIndex = nextIdx > 0 ? nextIdx - 1 : 0;
+          _atStop = nextIdx == 0;
           _previousStopStation = nextIdx > 1 ? stops[nextIdx - 2].station : null;
           _onBoardStation = nextIdx > 0 ? stops[nextIdx - 1].station : currentSt;
           _nextStopStation = stops[nextIdx].station;
@@ -383,6 +391,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     _isTrackingActive = false;
     _onBoardStation = null;
     _rideIndex = 0;
+    _atStop = true;
     _previousStopStation = null;
     _nextStopStation = null;
     _upcomingConnections = {};
@@ -434,9 +443,10 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   /// Points on-board / previous / next at the stop [index] of the tracked trip.
-  void _setRideIndex(int index) {
+  void _setRideIndex(int index, {bool atStop = true}) {
     final stops = _activeTrackedTrip!.stops;
     _rideIndex = index;
+    _atStop = atStop;
     _onBoardStation = stops[index].station;
     _previousStopStation = index > 0 ? stops[index - 1].station : null;
     _nextStopStation = index + 1 < stops.length ? stops[index + 1].station : null;
@@ -448,6 +458,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     final oldOn = _onBoardStation;
     final oldPrev = _previousStopStation;
     final oldNext = _nextStopStation;
+    final oldAtStop = _atStop;
     final tripStops = _activeTrackedTrip!.stops;
 
     // Locate the fix along the trip's own ordered stops. This tracks the rider
@@ -463,7 +474,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
           );
 
     if (progress != null) {
-      _setRideIndex(progress.index);
+      _setRideIndex(progress.index, atStop: progress.atStop);
     } else if (!tripStops.any((s) => s.station.lat != 0.0 || s.station.lon != 0.0)) {
       // Trip stops carry no coordinates: fall back to the global station list.
       final closest = LocationService.findClosestStation(
@@ -484,7 +495,8 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
 
     // GPS fixes arrive constantly but the stop only changes every few
     // minutes; avoid rebuilding listeners when nothing visible moved.
-    if (!identical(oldOn, _onBoardStation) ||
+    if (oldAtStop != _atStop ||
+        !identical(oldOn, _onBoardStation) ||
         !identical(oldPrev, _previousStopStation) ||
         !identical(oldNext, _nextStopStation)) {
       notifyListeners();
