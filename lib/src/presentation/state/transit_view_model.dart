@@ -7,6 +7,7 @@ import '../../domain/entities/trips.dart';
 import '../../domain/entities/transit_route.dart';
 import '../../data/repositories/gtfs_repository.dart';
 import '../../services/location_service.dart';
+import '../../services/ride_progress.dart';
 import '../../services/connection_advisor_service.dart';
 import '../../services/melbourne_gtfs_service.dart';
 import '../../services/ptv_rt_service.dart';
@@ -45,6 +46,11 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
   // Active On-Board Ride Tracking & Connection Advisory State
   Trip? _activeTrackedTrip;
   Station? _onBoardStation;
+  /// Index into the tracked trip's stops of the current / last-passed stop.
+  int _rideIndex = 0;
+  /// True when the rider is at [_onBoardStation]; false when travelling past it
+  /// towards [_nextStopStation].
+  bool _atStop = true;
   Station? _previousStopStation;
   Station? _nextStopStation;
   bool _isTrackingActive = false;
@@ -300,6 +306,9 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
   Trip? get activeTrackedTrip => _activeTrackedTrip;
   Station? get onBoardStation => _onBoardStation;
   Station? get currentStopStation => _onBoardStation;
+  /// True while the train is travelling between [currentStopStation] (last stop
+  /// passed) and [nextStopStation]; false when at a stop.
+  bool get isBetweenStops => _isTrackingActive && !_atStop && _nextStopStation != null;
   Station? get previousStopStation => _previousStopStation;
   Station? get nextStopStation => _nextStopStation;
   bool get isTrackingActive => _isTrackingActive;
@@ -329,19 +338,31 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     _onBoardStation = currentSt;
 
     final stops = activeTrip.stops;
+    _rideIndex = 0;
+    _atStop = true;
+    _previousStopStation = null;
+    _nextStopStation = null;
     if (stops.isNotEmpty) {
       final curIdx = stops.indexWhere((s) => s.station.isSameStopAs(currentSt));
       if (curIdx != -1) {
-        _onBoardStation = stops[curIdx].station;
-        _previousStopStation = curIdx > 0 ? stops[curIdx - 1].station : null;
-        _nextStopStation = curIdx + 1 < stops.length ? stops[curIdx + 1].station : null;
+        _setRideIndex(curIdx);
       } else {
-        _previousStopStation = null;
-        _nextStopStation = stops.length > 1 ? stops[1].station : null;
+        // Boarding stop isn't on the trip: don't guess a neighbour (the old
+        // stops[1] could be behind the rider). Use timetable times if we have
+        // them; otherwise wait for the first GPS fix.
+        final now = _clock();
+        final nextIdx = stops.indexWhere((s) {
+          final t = s.arrivalTime ?? s.departureTime;
+          return t != null && t.isAfter(now);
+        });
+        if (nextIdx != -1) {
+          _rideIndex = nextIdx > 0 ? nextIdx - 1 : 0;
+          _atStop = nextIdx == 0;
+          _previousStopStation = nextIdx > 1 ? stops[nextIdx - 2].station : null;
+          _onBoardStation = nextIdx > 0 ? stops[nextIdx - 1].station : currentSt;
+          _nextStopStation = stops[nextIdx].station;
+        }
       }
-    } else {
-      _previousStopStation = null;
-      _nextStopStation = null;
     }
 
     notifyListeners();
@@ -369,6 +390,8 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     _activeTrackedTrip = null;
     _isTrackingActive = false;
     _onBoardStation = null;
+    _rideIndex = 0;
+    _atStop = true;
     _previousStopStation = null;
     _nextStopStation = null;
     _upcomingConnections = {};
@@ -419,56 +442,64 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  /// Points on-board / previous / next at the stop [index] of the tracked trip.
+  void _setRideIndex(int index, {bool atStop = true}) {
+    final stops = _activeTrackedTrip!.stops;
+    _rideIndex = index;
+    _atStop = atStop;
+    _onBoardStation = stops[index].station;
+    _previousStopStation = index > 0 ? stops[index - 1].station : null;
+    _nextStopStation = index + 1 < stops.length ? stops[index + 1].station : null;
+  }
+
   void handlePositionUpdate(Position position) {
     if (!_isTrackingActive || _activeTrackedTrip == null) return;
 
-    // When tracking an active trip, search only among that trip's stops for accurate matching.
-    // Fall back to global station list if the trip has no resolved stops.
+    final oldOn = _onBoardStation;
+    final oldPrev = _previousStopStation;
+    final oldNext = _nextStopStation;
+    final oldAtStop = _atStop;
     final tripStops = _activeTrackedTrip!.stops;
-    final Station? closestStation;
 
-    if (tripStops.isNotEmpty) {
-      // Find the closest stop on the current trip (tighter 500m radius for trams)
-      closestStation = LocationService.findClosestStation(
-        position.latitude,
-        position.longitude,
-        tripStops.map((s) => s.station).toList(),
-        maxDistanceMeters: 500,
-      );
-    } else {
-      // Global fallback (trains with large station spacing)
-      closestStation = LocationService.findClosestStation(
+    // Locate the fix along the trip's own ordered stops. This tracks the rider
+    // between stations too (current = last stop passed, next = the one ahead)
+    // and never moves backwards.
+    final progress = tripStops.isEmpty
+        ? null
+        : locateOnTrip(
+            tripStops,
+            position.latitude,
+            position.longitude,
+            minIndex: _rideIndex,
+          );
+
+    if (progress != null) {
+      _setRideIndex(progress.index, atStop: progress.atStop);
+    } else if (!tripStops.any((s) => s.station.lat != 0.0 || s.station.lon != 0.0)) {
+      // Trip stops carry no coordinates: fall back to the global station list.
+      final closest = LocationService.findClosestStation(
         position.latitude,
         position.longitude,
         _stations,
         maxDistanceMeters: 1500,
       );
+      if (closest != null) {
+        final idx = tripStops.indexWhere((s) => s.station.isSameStopAs(closest));
+        if (idx != -1) {
+          _setRideIndex(idx);
+        } else {
+          _onBoardStation = closest;
+        }
+      }
     }
 
-    if (closestStation != null) {
-      final oldOn = _onBoardStation;
-      final oldPrev = _previousStopStation;
-      final oldNext = _nextStopStation;
-      final stops = _activeTrackedTrip!.stops;
-      final curIdx = stops.indexWhere((s) =>
-          s.station.id == closestStation!.id ||
-          s.station.stopId == closestStation.stopId ||
-          s.station.name.toLowerCase() == closestStation.name.toLowerCase());
-
-      if (curIdx != -1) {
-        _onBoardStation = stops[curIdx].station;
-        _previousStopStation = curIdx > 0 ? stops[curIdx - 1].station : null;
-        _nextStopStation = curIdx + 1 < stops.length ? stops[curIdx + 1].station : null;
-      } else {
-        _onBoardStation = closestStation;
-      }
-      // GPS fixes arrive constantly but the stop only changes every few
-      // minutes; avoid rebuilding listeners when nothing visible moved.
-      if (!identical(oldOn, _onBoardStation) ||
-          !identical(oldPrev, _previousStopStation) ||
-          !identical(oldNext, _nextStopStation)) {
-        notifyListeners();
-      }
+    // GPS fixes arrive constantly but the stop only changes every few
+    // minutes; avoid rebuilding listeners when nothing visible moved.
+    if (oldAtStop != _atStop ||
+        !identical(oldOn, _onBoardStation) ||
+        !identical(oldPrev, _previousStopStation) ||
+        !identical(oldNext, _nextStopStation)) {
+      notifyListeners();
     }
   }
 

@@ -68,6 +68,7 @@ class _LiveRideSheetState extends State<LiveRideSheet> {
     final currentStation = viewModel.currentStopStation ?? onBoardStation;
     final previousStation = viewModel.previousStopStation;
     final nextStation = viewModel.nextStopStation;
+    final isBetweenStops = viewModel.isBetweenStops;
     final connectionsByStation = viewModel.upcomingConnections;
     final isLoadingConnections = viewModel.isLoadingConnections;
 
@@ -274,9 +275,9 @@ class _LiveRideSheetState extends State<LiveRideSheet> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text(
-                                'CURRENT STOP',
-                                style: TextStyle(
+                              Text(
+                                isBetweenStops ? 'BETWEEN STOPS' : 'CURRENT STOP',
+                                style: const TextStyle(
                                   fontSize: 10,
                                   fontWeight: FontWeight.bold,
                                   letterSpacing: 1.0,
@@ -285,13 +286,25 @@ class _LiveRideSheetState extends State<LiveRideSheet> {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                (currentStation ?? nextStation)!.name,
+                                isBetweenStops && currentStation != null
+                                    ? '${currentStation.name} → ${nextStation!.name}'
+                                    : (currentStation ?? nextStation)!.name,
                                 style: theme.textTheme.titleMedium?.copyWith(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 17,
                                 ),
                               ),
-                              if (previousStation != null) ...[
+                              if (isBetweenStops) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Departed: ${currentStation!.name}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: theme.textTheme.bodySmall?.color
+                                        ?.withAlpha(160),
+                                  ),
+                                ),
+                              ] else if (previousStation != null) ...[
                                 const SizedBox(height: 2),
                                 Text(
                                   'Departed: ${previousStation.name}',
@@ -306,7 +319,7 @@ class _LiveRideSheetState extends State<LiveRideSheet> {
                                   nextStation.name != currentStation?.name) ...[
                                 const SizedBox(height: 2),
                                 Text(
-                                  'Next stop: ${nextStation.name}',
+                                  '${isBetweenStops ? 'Approaching' : 'Next stop'}: ${nextStation.name}',
                                   style: const TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w500,

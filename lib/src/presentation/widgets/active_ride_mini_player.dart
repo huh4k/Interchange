@@ -13,13 +13,14 @@ class ActiveRideMiniPlayer extends StatelessWidget {
   Widget build(BuildContext context) {
     // Subscribe only to the few values shown here so GPS fixes that don't move
     // the stop (and unrelated view-model changes) don't rebuild the banner.
-    final (isActive, destination, currentName, nextName) =
-        context.select<TransitViewModel, (bool, String?, String?, String?)>(
+    final (isActive, destination, currentName, nextName, between) =
+        context.select<TransitViewModel, (bool, String?, String?, String?, bool)>(
       (vm) => (
         vm.isTrackingActive && vm.activeTrackedTrip != null,
         vm.activeTrackedTrip?.destinationName,
         vm.currentStopStation?.name,
         vm.nextStopStation?.name,
+        vm.isBetweenStops,
       ),
     );
     if (!isActive) return const SizedBox.shrink();
@@ -78,9 +79,11 @@ class ActiveRideMiniPlayer extends StatelessWidget {
                         ),
                         const SizedBox(height: 1),
                         Text(
-                          'To $destination'
-                          '${currentName != null ? ' • $currentName' : ''}'
-                          '${nextName != null ? ' → $nextName' : ''}',
+                          between && nextName != null
+                              ? 'To $destination • Between $currentName and $nextName'
+                              : 'To $destination'
+                                  '${currentName != null ? ' • $currentName' : ''}'
+                                  '${nextName != null ? ' → $nextName' : ''}',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 12,

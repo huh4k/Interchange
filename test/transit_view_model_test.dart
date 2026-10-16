@@ -552,6 +552,72 @@ void main() {
         expect(vm.nextStopStation?.id, 'c');
       });
 
+      test('between stops: current is the last stop passed, next is ahead', () async {
+        final location = _QuietLocationService();
+        final vm = TransitViewModel(
+          repository: _MockRepository(),
+          ptvService: _MockPtvService(),
+          locationService: location,
+          connectionAdvisor: _RecordingAdvisor(),
+        );
+        addTearDown(vm.dispose);
+        await vm.initFuture;
+        await vm.startTrackingTrip(rideTrip(), initialStation: a);
+
+        // Midway A -> B, ~3 km from either stop (beyond the "at stop" radius).
+        location.emitMockPosition(_pos(-37.825, 144.925));
+        await Future<void>.delayed(Duration.zero);
+        expect(vm.currentStopStation?.id, 'a');
+        expect(vm.nextStopStation?.id, 'b');
+        expect(vm.isBetweenStops, isTrue);
+
+        // Midway B -> C.
+        location.emitMockPosition(_pos(-37.875, 144.975));
+        await Future<void>.delayed(Duration.zero);
+        expect(vm.currentStopStation?.id, 'b');
+        expect(vm.previousStopStation?.id, 'a');
+        expect(vm.nextStopStation?.id, 'c');
+
+        location.emitMockPosition(_pos(-37.90, 145.00)); // at C
+        await Future<void>.delayed(Duration.zero);
+        expect(vm.isBetweenStops, isFalse);
+      });
+
+      test('progress never moves backwards on a noisy fix', () async {
+        final location = _QuietLocationService();
+        final vm = TransitViewModel(
+          repository: _MockRepository(),
+          ptvService: _MockPtvService(),
+          locationService: location,
+          connectionAdvisor: _RecordingAdvisor(),
+        );
+        addTearDown(vm.dispose);
+        await vm.initFuture;
+        await vm.startTrackingTrip(rideTrip(), initialStation: a);
+
+        location.emitMockPosition(_pos(-37.85, 144.95)); // at B
+        await Future<void>.delayed(Duration.zero);
+        location.emitMockPosition(_pos(-37.80, 144.90)); // jitter back at A
+        await Future<void>.delayed(Duration.zero);
+        expect(vm.currentStopStation?.id, 'b');
+        expect(vm.nextStopStation?.id, 'c');
+      });
+
+      test('boarding mid-route: next stop is ahead of the selected station', () async {
+        final vm = TransitViewModel(
+          repository: _MockRepository(),
+          ptvService: _MockPtvService(),
+          locationService: _QuietLocationService(),
+          connectionAdvisor: _RecordingAdvisor(),
+        );
+        addTearDown(vm.dispose);
+        await vm.initFuture;
+        await vm.startTrackingTrip(rideTrip(), initialStation: b);
+        expect(vm.currentStopStation?.id, 'b');
+        expect(vm.previousStopStation?.id, 'a');
+        expect(vm.nextStopStation?.id, 'c');
+      });
+
       test('silent refresh with unchanged data notifies once', () async {
         await viewModel.loadData();
         var notifies = 0;

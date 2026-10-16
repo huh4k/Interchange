@@ -149,6 +149,41 @@ void main() {
     viewModel.dispose();
   });
 
+  testWidgets('LiveRideSheet shows "between stops" while travelling to the next stop', (tester) async {
+    final viewModel = TransitViewModel(
+      repository: _MockRepoForLiveRide(),
+      ptvService: _MockPtvForLiveRide(),
+      locationService: _MockLocationService(),
+    );
+    await viewModel.startTrackingTrip(sampleTrip, initialStation: stationFlinders);
+    // Midway between Flinders Street and Richmond (~1.1 km from each).
+    viewModel.handlePositionUpdate(Position(
+      latitude: -37.8211,
+      longitude: 144.97835,
+      timestamp: DateTime.now(),
+      accuracy: 1,
+      altitude: 0,
+      altitudeAccuracy: 0,
+      heading: 0,
+      headingAccuracy: 0,
+      speed: 0,
+      speedAccuracy: 0,
+    ));
+
+    await tester.pumpWidget(
+      MaterialApp(home: Scaffold(body: LiveRideSheet(viewModel: viewModel))),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('BETWEEN STOPS'), findsOneWidget);
+    expect(find.text('CURRENT STOP'), findsNothing);
+    expect(find.text('Flinders Street Station → Richmond Station'), findsOneWidget);
+    expect(find.text('Approaching: Richmond Station'), findsOneWidget);
+    viewModel.stopTracking();
+    viewModel.dispose();
+  });
+
   testWidgets('LiveRideSheet renders departed (previous) stop, current stop, and next stop at intermediate station', (tester) async {
     final viewModel = TransitViewModel(
       repository: _MockRepoForLiveRide(),
