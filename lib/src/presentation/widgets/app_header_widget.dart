@@ -29,149 +29,98 @@ class AppHeaderWidget extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(13),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    AppColors.primaryCyan,
-                    AppColors.secondaryIndigo,
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(18),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.primaryCyan.withAlpha(100),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Icon(
-                activeMode == PtvMode.metroTram
-                    ? Icons.tram_rounded
-                    : Icons.train_rounded,
-                color: Colors.white,
-                size: 28,
-              ),
-            ),
-            const SizedBox(width: 14),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Interchange',
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 0.5,
-                    fontSize: 20,
-                  ),
-                ),
-                Row(
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: isLoading
-                            ? AppColors.statusAmber
-                            : AppColors.statusGreen,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: isLoading
-                                ? AppColors.statusAmber.withAlpha(100)
-                                : AppColors.statusGreen.withAlpha(100),
-                            blurRadius: 4,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      isLoading
-                          ? '$loadingPercentage% • Syncing...'
-                          : 'Real-Time Feed',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: isLoading
-                            ? AppColors.primaryCyan
-                            : AppColors.statusGreen,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.3,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ],
-        ),
-        Row(
-          children: [
-            Container(
-              margin: const EdgeInsets.only(right: 8),
-              padding: const EdgeInsets.all(9),
-              decoration: BoxDecoration(
-                color: (activeMode == PtvMode.metroTram
-                        ? AppColors.melbourneTram
-                        : AppColors.melbourneMetro)
-                    .withAlpha(25),
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: (activeMode == PtvMode.metroTram
-                          ? AppColors.melbourneTram
-                          : AppColors.melbourneMetro)
-                      .withAlpha(80),
-                  width: 1.2,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withAlpha(5),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Icon(
-                activeMode == PtvMode.metroTram
-                    ? Icons.tram_rounded
-                    : Icons.train_rounded,
-                size: 20,
-                color: activeMode == PtvMode.metroTram
-                    ? AppColors.melbourneTram
-                    : AppColors.melbourneMetro,
-              ),
-            ),
-            if (isLoading)
+        Flexible(
+          child: Row(
+            children: [
               Container(
-                margin: const EdgeInsets.only(right: 10),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
+                padding: const EdgeInsets.all(13),
                 decoration: BoxDecoration(
-                  color: AppColors.primaryCyan.withAlpha(35),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: AppColors.primaryCyan.withAlpha(80),
-                    width: 1,
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [AppColors.primaryCyan, AppColors.secondaryIndigo],
                   ),
+                  borderRadius: BorderRadius.circular(18),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primaryCyan.withAlpha(100),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
-                child: Text(
-                  '$loadingPercentage%',
-                  style: const TextStyle(
-                    color: AppColors.primaryCyan,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                    letterSpacing: 0.2,
-                  ),
+                child: Icon(
+                  activeMode == PtvMode.metroTram
+                      ? Icons.tram_rounded
+                      : Icons.train_rounded,
+                  color: Colors.white,
+                  size: 28,
                 ),
               ),
+              const SizedBox(width: 14),
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Interchange',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.5,
+                        fontSize: 20,
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: isLoading
+                                ? AppColors.statusAmber
+                                : AppColors.statusGreen,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: isLoading
+                                    ? AppColors.statusAmber.withAlpha(100)
+                                    : AppColors.statusGreen.withAlpha(100),
+                                blurRadius: 4,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            isLoading
+                                ? 'Syncing… $loadingPercentage%'
+                                : 'Real-Time Feed',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: isLoading
+                                  ? AppColors.primaryCyan
+                                  : AppColors.statusGreen,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        Row(
+          children: [
             if (onToggleTheme != null)
               Container(
                 margin: const EdgeInsets.only(right: 8),
@@ -245,10 +194,7 @@ class AppHeaderWidget extends StatelessWidget {
                           ),
                         ),
                       )
-                    : const Icon(
-                        Icons.refresh_rounded,
-                        size: 22,
-                      ),
+                    : const Icon(Icons.refresh_rounded, size: 22),
                 tooltip: 'Refresh Feed',
               ),
             ),
@@ -258,4 +204,3 @@ class AppHeaderWidget extends StatelessWidget {
     );
   }
 }
-
