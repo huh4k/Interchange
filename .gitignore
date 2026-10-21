@@ -60,4 +60,5 @@ app.*.map.json
 
 # Building
 build_ipa.sh
+install_apk.sh
 android/build/
