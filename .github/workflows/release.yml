@@ -1,0 +1,71 @@
+name: Release Android APK
+
+# Manual only: run it from the Actions tab after bumping `version:` in pubspec.yaml.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build APK and publish release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Read version from pubspec.yaml
+        id: version
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version:[[:space:]]*//' | tr -d '\r"' | cut -d'+' -f1)
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Fail if this version is already released
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/${{ steps.version.outputs.tag }}" >/dev/null; then
+            echo "::error::${{ steps.version.outputs.tag }} already exists. Bump the version in pubspec.yaml first."
+            exit 1
+          fi
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      # pubspec lists .env as an asset. It stays empty: release builds reach PTV
+      # through the signing proxy and never hold the API key.
+      - name: Create empty .env
+        run: touch .env
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build APK
+        env:
+          APP_KEY: ${{ secrets.APP_KEY }}
+        run: flutter build apk --release --dart-define=APP_KEY="$APP_KEY"
+
+      - name: Name the APK
+        run: mv build/app/outputs/flutter-apk/app-release.apk Interchange.apk
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: Interchange ${{ steps.version.outputs.tag }}
+          files: Interchange.apk
+          generate_release_notes: true
+          fail_on_unmatched_files: true
