@@ -57,7 +57,7 @@ cd Interchange
 flutter pub get
 ```
 
-Create a `.env` file in the project root:
+To run with your own key, create a `.env` file in the project root (it's optional, since the proxy is the default):
 
 ```env
 PTV_USER_ID=your_ptv_dev_id
@@ -77,11 +77,23 @@ flutter run
 flutter test
 ```
 
-## Web deployment
+## PTV API key
 
-The web build is public, so it never holds the PTV key. It calls `/api/ptv/...` on its own origin, and the Cloudflare Pages Function in [`functions/api/ptv`](functions/api/ptv/%5B%5Bpath%5D%5D.js) signs the request and forwards it to PTV. In the Pages project settings, add `PTV_USER_ID` and `PTV_API_KEY` as encrypted variables. Deploys run from [`cloudflare.yml`](.github/workflows/cloudflare.yml).
+No shipped build holds the PTV key. Requests go to a signing proxy, the Cloudflare Pages Function in [`functions/api/ptv`](functions/api/ptv/%5B%5Bpath%5D%5D.js), which signs them server-side and forwards them to PTV. In the Pages project settings, add `PTV_USER_ID` and `PTV_API_KEY` as encrypted variables.
 
-Mobile and desktop builds read the key from your local `.env` instead (see [Setup](#setup)).
+| Build | Where requests go |
+|---|---|
+| Web (`interchange.huh4k.dev`) | Its own origin, `/api/ptv` |
+| Android, iOS, desktop release builds | `https://interchange.huh4k.dev/api/ptv`, or your own via `--dart-define=PTV_PROXY_URL=...` |
+| Debug runs with a `.env` key | Signed locally, straight to PTV |
+
+Release builds ignore the key in `.env`, but `.env` is still bundled as an asset. Empty it before a release build, or the key ships inside it:
+
+```bash
+mv .env .env.dev && touch .env && flutter build apk --release; mv .env.dev .env
+```
+
+Web deploys run from [`cloudflare.yml`](.github/workflows/cloudflare.yml) with an empty `.env`.
 
 ## GTFS data
 

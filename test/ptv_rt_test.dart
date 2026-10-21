@@ -33,6 +33,19 @@ void main() {
       expect(signedUrl, contains('signature='));
     });
 
+    test('without a local key, requests go to the signing proxy unsigned', () {
+      EnvService.setCredentials(userId: '', apiKey: '');
+      addTearDown(() => EnvService.setCredentials(
+            userId: 'test_dev_id',
+            apiKey: 'test_api_key_hash',
+          ));
+
+      final url = PtvRealtimeService.generateSignedUrl('/v3/disruptions?route_types=0');
+
+      expect(url, 'https://interchange.huh4k.dev/api/ptv/v3/disruptions?route_types=0');
+      expect(EnvService.isConfigured, isTrue);
+    });
+
     test('fetchLiveDisruptions decodes a body over 128 KB', () async {
       final items = List.generate(
         600,

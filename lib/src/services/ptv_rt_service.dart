@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, kReleaseMode, visibleForTesting;
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:http/http.dart' as http;
 import '../core/heavy_work.dart';
@@ -16,12 +16,24 @@ class EnvService {
   static String _apiKey = const String.fromEnvironment('PTV_API_KEY');
   static String _baseUrl = const String.fromEnvironment('PTV_BASE_URL', defaultValue: 'https://timetableapi.ptv.vic.gov.au');
 
+  /// Signs PTV requests server-side (`functions/api/ptv`) so builds never need
+  /// the API key. Web uses its own origin instead of this URL.
+  static String _proxyUrl = const String.fromEnvironment('PTV_PROXY_URL', defaultValue: 'https://interchange.huh4k.dev/api/ptv');
+
   static String get userId => _userId;
   static String get apiKey => _apiKey;
   static String get baseUrl => _baseUrl;
-  /// The web build has no key: its requests go through the `/api/ptv` Pages
-  /// Function, which signs them server-side.
-  static bool get isConfigured => kIsWeb || (userId.isNotEmpty && apiKey.isNotEmpty);
+
+  /// A key from `.env`, used to sign requests locally. Release builds ignore it
+  /// and always go through the proxy, so a shipped build never signs itself.
+  static bool get hasLocalKey => !kReleaseMode && userId.isNotEmpty && apiKey.isNotEmpty;
+
+  static bool get usesProxy => kIsWeb || !hasLocalKey;
+  static String get proxyBase => kIsWeb ? '${Uri.base.origin}/api/ptv' : _proxyUrl;
+  static bool get isConfigured => !usesProxy || proxyBase.isNotEmpty;
+
+  @visibleForTesting
+  static void setProxyUrl(String url) => _proxyUrl = url;
 
   static void setCredentials({
     required String userId,
@@ -195,7 +207,7 @@ class PtvRealtimeService {
   }
 
   static String generateSignedUrl(String requestPath) {
-    if (kIsWeb) return '${Uri.base.origin}/api/ptv$requestPath';
+    if (EnvService.usesProxy) return '${EnvService.proxyBase}$requestPath';
     final devId = EnvService.userId;
     final key = EnvService.apiKey;
     final uriWithDevId = requestPath.contains('?')

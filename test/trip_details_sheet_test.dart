@@ -10,7 +10,10 @@ import 'package:transit_app/src/services/ptv_rt_service.dart';
 void main() {
   // Keep the sheet offline: with credentials unset, pattern lookups return
   // immediately instead of waiting on the (test-bound) HTTP client.
-  setUpAll(() => EnvService.setCredentials(userId: '', apiKey: ''));
+  setUpAll(() {
+    EnvService.setCredentials(userId: '', apiKey: '');
+    EnvService.setProxyUrl('');
+  });
 
   const stationFlinders = Station(
     id: '1071',

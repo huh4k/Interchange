@@ -3,6 +3,7 @@
 //
 //   GET /api/ptv/v3/departures/...?max_results=20  ->  timetableapi.ptv.vic.gov.au
 //
+// Used by the web app (same origin) and by mobile/desktop builds (PTV_PROXY_URL).
 // Set PTV_USER_ID and PTV_API_KEY as (encrypted) variables on the Pages project.
 
 const PTV_ORIGIN = 'https://timetableapi.ptv.vic.gov.au';
@@ -44,6 +45,9 @@ export async function onRequestGet({ request, env }) {
 
   const upstream = await fetch(`${PTV_ORIGIN}${toSign}&signature=${signature}`, {
     headers: { Accept: 'application/json' },
+    // Identical requests share one upstream call for a few seconds, which keeps
+    // a busy app from burning through the API key's rate limit.
+    cf: { cacheEverything: true, cacheTtl: 10 },
   });
   return new Response(upstream.body, {
     status: upstream.status,
