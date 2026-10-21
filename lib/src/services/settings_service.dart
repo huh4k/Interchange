@@ -1,9 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Persists user preferences (e.g. theme mode) to SharedPreferences.
+/// Persists user preferences (theme mode, walking time) to SharedPreferences.
 class SettingsService {
   static const _themeModeKey = 'theme_mode';
+  static const _walkTimeKey = 'walk_time_enabled';
+
+  /// Whether walking time to the selected station is shown. Off by default so
+  /// the app never asks for location unprompted.
+  Future<bool> getWalkTimeEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_walkTimeKey) ?? false;
+  }
+
+  Future<void> setWalkTimeEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_walkTimeKey, enabled);
+  }
 
   /// Reads the stored [ThemeMode]. Defaults to [ThemeMode.system].
   Future<ThemeMode> getThemeMode() async {

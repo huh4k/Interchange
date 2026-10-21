@@ -201,6 +201,17 @@ class _RecordingAdvisor extends ConnectionAdvisorService {
   }
 }
 
+/// Reports a fixed position without touching the platform.
+class _AtLocationService extends LocationService {
+  final Position position;
+  _AtLocationService(this.position);
+
+  @override
+  Future<Position?> getCurrentPosition() async => position;
+  @override
+  Future<bool> hasPermission() async => true;
+}
+
 class _QuietLocationService extends LocationService {
   @override
   Future<void> startLocationTracking({void Function(Position position)? onPositionChanged}) async {}
@@ -333,6 +344,87 @@ void main() {
       expect(nearest!.name, 'Flinders Street');
       expect(identical(vm.selectedStation, before), isTrue);
       expect(vm.isLocating, isFalse);
+    });
+
+    group('walking time', () {
+      // The default station is Flinders Street (-37.8183, 144.9671).
+      final clockNow = DateTime(2026, 10, 21, 8, 0);
+
+      Trip tripIn(int minutes) => Trip(
+            tripId: 'walk_$minutes',
+            routeId: 'r',
+            serviceId: 's',
+            headsign: 'Belgrave',
+            departure: TripDeparture(
+              scheduledTime: clockNow.add(Duration(minutes: minutes)),
+              platform: '1',
+              lineCode: 'BEL',
+              routeName: 'Belgrave Line',
+              destination: 'Belgrave',
+              type: TransitType.metro,
+            ),
+          );
+
+      Future<TransitViewModel> vmAt(double lat, {bool enabled = true}) async {
+        final vm = TransitViewModel(
+          repository: _MockRepository(),
+          ptvService: _MockPtvService(),
+          locationService: _AtLocationService(_pos(lat, 144.9671)),
+          clock: () => clockNow,
+        );
+        addTearDown(vm.dispose);
+        await vm.initFuture;
+        if (enabled) await vm.toggleWalkTime();
+        return vm;
+      }
+
+      test('is off by default and never reports a walk', () async {
+        final vm = await vmAt(-37.8183 + 0.0036, enabled: false);
+        await vm.refreshUserLocation();
+        expect(vm.walkTimeEnabled, isFalse);
+        expect(vm.walkToSelectedStation, isNull);
+        expect(vm.leaveByFor(tripIn(10)), isNull);
+        expect(vm.canCatch(tripIn(1)), isTrue);
+      });
+
+      test('reports walk time and distance for a nearby station', () async {
+        final vm = await vmAt(-37.8183 + 0.0036); // ~400 m north
+        expect(vm.walkDistanceMeters, closeTo(400, 15));
+        expect(vm.walkToSelectedStation, const Duration(minutes: 7));
+      });
+
+      test('hides walk time when the station is over 5 km away', () async {
+        final vm = await vmAt(-37.8183 + 0.1); // ~11 km
+        expect(vm.userPosition, isNotNull);
+        expect(vm.walkToSelectedStation, isNull);
+      });
+
+      test('computes leave-by with a one minute buffer and flags missed services', () async {
+        final vm = await vmAt(-37.8183 + 0.0036); // 7 min walk
+        // Leaves in 10 min: set off in 10 - 7 - 1 = 2 min.
+        expect(vm.leaveByFor(tripIn(10)), clockNow.add(const Duration(minutes: 2)));
+        expect(vm.canCatch(tripIn(10)), isTrue);
+        // Leaves in 8 min: must set off right now, still catchable.
+        expect(vm.canCatch(tripIn(8)), isTrue);
+        // Leaves in 7 min: should already have left.
+        expect(vm.canCatch(tripIn(7)), isFalse);
+      });
+
+      test('the setting is persisted across view models', () async {
+        final vm = await vmAt(-37.8183);
+        expect(vm.walkTimeEnabled, isTrue);
+
+        final again = TransitViewModel(
+          repository: _MockRepository(),
+          ptvService: _MockPtvService(),
+        );
+        addTearDown(again.dispose);
+        await again.initFuture;
+        expect(again.walkTimeEnabled, isTrue);
+
+        await again.toggleWalkTime();
+        expect(again.walkTimeEnabled, isFalse);
+      });
     });
 
     test('favorite toggle notifies before persisting completes', () async {

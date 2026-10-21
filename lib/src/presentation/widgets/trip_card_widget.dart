@@ -8,6 +8,12 @@ class TripCardWidget extends StatelessWidget {
   final Trip trip;
   final bool isFavorite;
   final bool hasDisruption;
+
+  /// When to set off to catch this service; null when walking time is off.
+  final DateTime? leaveBy;
+
+  /// False when the service leaves before the rider could walk to the station.
+  final bool reachable;
   final VoidCallback onToggleFavorite;
   final VoidCallback onTap;
 
@@ -16,6 +22,8 @@ class TripCardWidget extends StatelessWidget {
     required this.trip,
     required this.isFavorite,
     this.hasDisruption = false,
+    this.leaveBy,
+    this.reachable = true,
     required this.onToggleFavorite,
     required this.onTap,
   });
@@ -49,6 +57,12 @@ class TripCardWidget extends StatelessWidget {
     final statusTextColor = _getStatusTextColor(status);
     final mutedColor = theme.textTheme.bodySmall?.color?.withAlpha(200);
 
+    final leaveByText = leaveBy == null
+        ? ''
+        : reachable
+            ? 'Leave by ${_hhmm(leaveBy!)}'
+            : 'Too soon';
+
     final semanticsLabel = [
       '$lineCode to $destinationText',
       if (timeString.isNotEmpty) 'departs $timeString',
@@ -56,6 +70,7 @@ class TripCardWidget extends StatelessWidget {
         minutesAway <= 0 ? 'now' : 'in $minutesAway minutes',
       if (platform.isNotEmpty) 'platform $platform',
       if (showStatus) status.label,
+      if (leaveByText.isNotEmpty) leaveByText.toLowerCase(),
       if (hasDisruption) 'service alert',
       if (isFavorite) 'saved',
     ].join(', ');
@@ -71,7 +86,9 @@ class TripCardWidget extends StatelessWidget {
         ): onToggleFavorite,
       },
       child: ExcludeSemantics(
-        child: Card(
+        child: Opacity(
+          opacity: leaveBy != null && !reachable ? 0.55 : 1,
+          child: Card(
           margin: const EdgeInsets.only(bottom: 12.0),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
@@ -124,6 +141,33 @@ class TripCardWidget extends StatelessWidget {
                               style: TextStyle(fontSize: 12, color: mutedColor),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        if (leaveByText.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4.0),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.directions_walk_rounded,
+                                  size: 13,
+                                  color: reachable
+                                      ? AppColors.primaryCyan
+                                      : AppColors.statusDelayed,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  leaveByText,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: reachable
+                                        ? AppColors.primaryCyan
+                                        : AppColors.statusDelayed,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         const SizedBox(height: 6),
@@ -222,9 +266,13 @@ class TripCardWidget extends StatelessWidget {
             ),
           ),
         ),
+        ),
       ),
     );
   }
+
+  static String _hhmm(DateTime t) =>
+      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
   Color _getStatusTextColor(ServiceStatus status) {
     switch (status) {

@@ -9,6 +9,7 @@ import '../widgets/alert_banner_widget.dart';
 import '../widgets/app_header_widget.dart';
 import '../widgets/empty_state_widget.dart';
 import '../widgets/quick_station_strip.dart';
+import '../widgets/walk_time_chip.dart';
 import '../widgets/station_selector_card.dart';
 import '../widgets/trip_card_skeleton.dart';
 import '../widgets/transit_mode_slider.dart';
@@ -140,6 +141,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       onStationSelected: viewModel.selectStation,
                       onToggleFavorite: viewModel.toggleFavoriteStation,
                     ),
+                    const SizedBox(height: 8),
+                    WalkTimeChip(viewModel: viewModel),
                   ],
                   const SizedBox(height: 10),
 
@@ -432,6 +435,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     trip: trip,
                     isFavorite: viewModel.isFavoriteTrip(trip.tripId),
                     hasDisruption: viewModel.hasDisruptionForTrip(trip),
+                    leaveBy: viewModel.leaveByFor(trip),
+                    reachable: viewModel.canCatch(trip),
                     onToggleFavorite: () =>
                         viewModel.toggleFavoriteTrip(trip.tripId),
                     onTap: () => TripDetailsSheet.show(

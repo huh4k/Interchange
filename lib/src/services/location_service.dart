@@ -35,6 +35,18 @@ class LocationService {
     }
   }
 
+  /// Whether location is already usable, without prompting the user.
+  Future<bool> hasPermission() async {
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) return false;
+      final permission = await Geolocator.checkPermission();
+      return permission == LocationPermission.whileInUse ||
+          permission == LocationPermission.always;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Retrieves instantaneous GPS position if permission is granted.
   Future<Position?> getCurrentPosition() async {
     try {
@@ -146,6 +158,21 @@ class LocationService {
       final km = distanceMeters / 1000.0;
       return '${km.toStringAsFixed(1)} km';
     }
+  }
+
+  /// Average walking pace.
+  static const double walkingMetresPerMinute = 80;
+
+  /// Straight-line distance understates the street route; scale it up.
+  static const double walkingDetourFactor = 1.3;
+
+  /// Spare minutes added to a walk so a departure isn't caught on the doorstep.
+  static const int walkingBufferMinutes = 1;
+
+  /// Whole minutes to walk [distanceMeters] (straight-line), rounded up.
+  static int walkingMinutes(double distanceMeters) {
+    if (distanceMeters <= 0) return 0;
+    return (distanceMeters * walkingDetourFactor / walkingMetresPerMinute).ceil();
   }
 
   static double _degreesToRadians(double degrees) {

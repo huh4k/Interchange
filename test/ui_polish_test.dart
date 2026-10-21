@@ -82,6 +82,61 @@ void main() {
       expect(find.text('Plat 3'), findsOneWidget);
     });
 
+    testWidgets('shows Leave by when reachable and Too soon when not', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _wrap(
+          TripCardWidget(
+            trip: _trip(),
+            isFavorite: false,
+            leaveBy: DateTime(2026, 10, 21, 8, 42),
+            onToggleFavorite: () {},
+            onTap: () {},
+          ),
+        ),
+      );
+      expect(find.text('Leave by 08:42'), findsOneWidget);
+      expect(find.text('Too soon'), findsNothing);
+
+      await tester.pumpWidget(
+        _wrap(
+          TripCardWidget(
+            trip: _trip(),
+            isFavorite: false,
+            leaveBy: DateTime(2026, 10, 21, 8, 42),
+            reachable: false,
+            onToggleFavorite: () {},
+            onTap: () {},
+          ),
+        ),
+      );
+      expect(find.text('Too soon'), findsOneWidget);
+      expect(find.text('Leave by 08:42'), findsNothing);
+      final opacity = tester.widget<Opacity>(
+        find.descendant(
+          of: find.byType(TripCardWidget),
+          matching: find.byType(Opacity),
+        ),
+      );
+      expect(opacity.opacity, lessThan(1));
+    });
+
+    testWidgets('has no walking line when walking time is off', (tester) async {
+      await tester.pumpWidget(
+        _wrap(
+          TripCardWidget(
+            trip: _trip(),
+            isFavorite: false,
+            onToggleFavorite: () {},
+            onTap: () {},
+          ),
+        ),
+      );
+      expect(find.textContaining('Leave by'), findsNothing);
+      expect(find.text('Too soon'), findsNothing);
+    });
+
     testWidgets('shows Delayed and Alert chips when relevant', (tester) async {
       await tester.pumpWidget(
         _wrap(

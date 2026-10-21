@@ -12,12 +12,14 @@ import '../../services/connection_advisor_service.dart';
 import '../../services/melbourne_gtfs_service.dart';
 import '../../services/ptv_rt_service.dart';
 import '../../services/favorite_service.dart';
+import '../../services/settings_service.dart';
 
 class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
   final IGtfsRepository repository;
   final PtvRealtimeService ptvService;
   final FavoriteService favoriteService = FavoriteService();
   final LocationService locationService;
+  final SettingsService _settings;
   late final ConnectionAdvisorService connectionAdvisor;
   bool _isDisposed = false;
 
@@ -42,6 +44,14 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
 
   Position? _userPosition;
   bool _isLocating = false;
+
+  // Walking time to the selected station (opt-in, persisted).
+  bool _walkTimeEnabled = false;
+  DateTime? _lastWalkLocationAt;
+  static const Duration _walkLocationInterval = Duration(minutes: 1);
+
+  /// Beyond this the walking time isn't meaningful, so it is hidden.
+  static const double walkMaxMeters = 5000;
 
   // Active On-Board Ride Tracking & Connection Advisory State
   Trip? _activeTrackedTrip;
@@ -94,8 +104,10 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     PtvRealtimeService? ptvService,
     LocationService? locationService,
     ConnectionAdvisorService? connectionAdvisor,
+    SettingsService? settingsService,
     DateTime Function()? clock,
   })  : _clock = clock ?? DateTime.now,
+        _settings = settingsService ?? SettingsService(),
         ptvService = ptvService ?? PtvRealtimeService(),
         locationService = locationService ?? LocationService() {
     // Built here (not in the initializer list) so the advisor shares this
@@ -126,6 +138,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     if (recents.isNotEmpty) {
       _recentStations = recents;
     }
+    _walkTimeEnabled = await _settings.getWalkTimeEnabled();
     notifyListeners();
   }
 
@@ -613,6 +626,72 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     return null;
   }
 
+  bool get walkTimeEnabled => _walkTimeEnabled;
+
+  /// Straight-line metres from the user to the selected station, or null when
+  /// walking time is off, the position or station coordinates are unknown, or
+  /// the station is too far for a walk to make sense.
+  double? get walkDistanceMeters {
+    final pos = _userPosition;
+    final station = _selectedStation;
+    if (!_walkTimeEnabled || pos == null) return null;
+    if (station.lat == 0.0 && station.lon == 0.0) return null;
+    final meters = LocationService.calculateDistanceMeters(
+      pos.latitude,
+      pos.longitude,
+      station.lat,
+      station.lon,
+    );
+    return meters <= walkMaxMeters ? meters : null;
+  }
+
+  /// Walking time to the selected station, see [walkDistanceMeters].
+  Duration? get walkToSelectedStation {
+    final meters = walkDistanceMeters;
+    if (meters == null) return null;
+    return Duration(minutes: LocationService.walkingMinutes(meters));
+  }
+
+  /// When the user must set off to catch [trip], or null without a walk time.
+  DateTime? leaveByFor(Trip trip) {
+    final walk = walkToSelectedStation;
+    final departs = trip.departure?.scheduledTime;
+    if (walk == null || departs == null) return null;
+    return departs.subtract(
+      walk + const Duration(minutes: LocationService.walkingBufferMinutes),
+    );
+  }
+
+  /// False only when the walk time is known and [trip] leaves before the user
+  /// could get there.
+  bool canCatch(Trip trip) {
+    final leaveBy = leaveByFor(trip);
+    return leaveBy == null || !leaveBy.isBefore(_clock());
+  }
+
+  /// Turns walking time on or off. Turning it on asks for location permission.
+  Future<void> toggleWalkTime() async {
+    _walkTimeEnabled = !_walkTimeEnabled;
+    notifyListeners();
+    await _settings.setWalkTimeEnabled(_walkTimeEnabled);
+    if (_walkTimeEnabled) {
+      _lastWalkLocationAt = _clock();
+      await refreshUserLocation();
+    }
+  }
+
+  /// Keeps the position fresh for walking time without ever prompting: only
+  /// runs when it is enabled and permission was already granted.
+  Future<void> _refreshWalkLocation() async {
+    if (!_walkTimeEnabled) return;
+    final now = _clock();
+    final last = _lastWalkLocationAt;
+    if (last != null && now.difference(last) < _walkLocationInterval) return;
+    _lastWalkLocationAt = now;
+    if (!await locationService.hasPermission()) return;
+    await refreshUserLocation();
+  }
+
   /// Refreshes the user's current GPS position.
   Future<void> refreshUserLocation() async {
     try {
@@ -959,6 +1038,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
         // Count the next auto-refresh from this load, not from app start.
         if (_autoRefreshTimer != null) _startAutoRefresh();
         notifyListeners();
+        unawaited(_refreshWalkLocation());
       }
 
       // Alerts were requested in parallel; apply them now (usually already done).

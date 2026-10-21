@@ -31,6 +31,7 @@ To run from source instead, see [Getting Started](#getting-started).
 | 🚆 **Three networks** | Switch between Metro trains, Yarra trams and V/Line with one tap |
 | ⏱️ **Live departures** | Real-time data from the PTV Timetable API, with the GTFS timetable as a fallback |
 | 📍 **Live ride tracking** | Follow your trip stop by stop, including "Between X and Y" while travelling |
+| 🚶 **Leave by** | Opt-in walking time to your station, with a "Leave by" time on each departure and services you can't reach dimmed |
 | 🔁 **Connection advisor** | Checks whether you'll make a transfer at key interchange stations |
 | ⚠️ **Disruptions** | Alerts for the lines and stations you care about |
 | ⭐ **Favourites and search** | Fast station search, recents and saved stations |

@@ -54,5 +54,16 @@ void main() {
       expect(closest?.id, equals('1071'));
       expect(closest?.name, equals('Flinders Street Station'));
     });
+
+    test('walkingMinutes scales straight-line distance and rounds up', () {
+      expect(LocationService.walkingMinutes(0), 0);
+      expect(LocationService.walkingMinutes(-5), 0);
+      // 80 m * 1.3 detour / 80 m per min = 1.3 min -> 2
+      expect(LocationService.walkingMinutes(80), 2);
+      // 400 m -> 6.5 min -> 7
+      expect(LocationService.walkingMinutes(400), 7);
+      // 5 km -> 81.25 min -> 82
+      expect(LocationService.walkingMinutes(5000), 82);
+    });
   });
 }
