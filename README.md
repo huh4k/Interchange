@@ -87,6 +87,20 @@ No shipped build holds the PTV key. Requests go to a signing proxy, the Cloudfla
 | Android, iOS, desktop release builds | `https://interchange.huh4k.dev/api/ptv`, or your own via `--dart-define=PTV_PROXY_URL=...` |
 | Debug runs with a `.env` key | Signed locally, straight to PTV |
 
+The proxy only answers trusted callers: the website itself, or a client that sends the shared secret in an `X-Interchange-Key` header. Pick a secret and add it to the Pages project as an encrypted `APP_KEY` variable:
+
+```bash
+openssl rand -hex 32
+```
+
+Then pass the same value when you build an app you hand out. It's a build-time define, never part of `.env` or the repo:
+
+```bash
+flutter build apk --release --dart-define=APP_KEY=your_secret
+```
+
+Anything shipped in an app can be extracted, so this keeps casual users off the proxy rather than stopping a determined one. If it leaks, change `APP_KEY` in Pages and rebuild.
+
 Release builds ignore the key in `.env`, but `.env` is still bundled as an asset. Empty it before a release build, or the key ships inside it:
 
 ```bash

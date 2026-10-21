@@ -26,6 +26,10 @@ jobs:
           channel: 'stable'
           cache: true
 
+      # pubspec lists .env as an asset; it is gitignored, so create it empty.
+      - name: Create empty .env
+        run: touch .env
+
       - name: Install dependencies
         run: flutter pub get
 

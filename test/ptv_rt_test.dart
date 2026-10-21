@@ -46,6 +46,19 @@ void main() {
       expect(EnvService.isConfigured, isTrue);
     });
 
+    test('proxy requests carry the app key only when one was built in', () {
+      EnvService.setCredentials(userId: '', apiKey: '');
+      addTearDown(() => EnvService.setCredentials(
+            userId: 'test_dev_id',
+            apiKey: 'test_api_key_hash',
+          ));
+
+      expect(
+        EnvService.proxyHeaders.containsKey('X-Interchange-Key'),
+        EnvService.appKey.isNotEmpty,
+      );
+    });
+
     test('fetchLiveDisruptions decodes a body over 128 KB', () async {
       final items = List.generate(
         600,

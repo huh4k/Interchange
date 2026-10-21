@@ -4,10 +4,17 @@
 //   GET /api/ptv/v3/departures/...?max_results=20  ->  timetableapi.ptv.vic.gov.au
 //
 // Used by the web app (same origin) and by mobile/desktop builds (PTV_PROXY_URL).
-// Set PTV_USER_ID and PTV_API_KEY as (encrypted) variables on the Pages project.
+// Pages project variables (encrypted):
+//   PTV_USER_ID, PTV_API_KEY  the PTV credentials
+//   APP_KEY                   shared secret for trusted non-browser clients
+//
+// Callers must be the website itself (a same-origin browser request) or send
+// the shared secret in X-Interchange-Key. This stops casual use of the key,
+// not a determined attacker: anything shipped in an app can be extracted.
 
 const PTV_ORIGIN = 'https://timetableapi.ptv.vic.gov.au';
 const PREFIX = '/api/ptv';
+const SITE_ORIGIN = 'https://interchange.huh4k.dev';
 
 async function sign(key, message) {
   const k = await crypto.subtle.importKey(
@@ -24,7 +31,29 @@ async function sign(key, message) {
     .toUpperCase();
 }
 
+// Constant-time comparison so the secret can't be guessed byte by byte.
+function safeEqual(a, b) {
+  const x = new TextEncoder().encode(a);
+  const y = new TextEncoder().encode(b);
+  let diff = x.length ^ y.length;
+  for (let i = 0; i < x.length; i++) diff |= x[i] ^ (y[i % y.length] ?? 0);
+  return diff === 0;
+}
+
+function isTrusted(request, env) {
+  const key = request.headers.get('X-Interchange-Key');
+  if (env.APP_KEY && key && safeEqual(key, env.APP_KEY)) return true;
+
+  // Browsers set these themselves; other sites can't forge them from a page.
+  const site = request.headers.get('Sec-Fetch-Site');
+  const from = request.headers.get('Origin') ?? request.headers.get('Referer') ?? '';
+  return site === 'same-origin' && (from === '' || from.startsWith(SITE_ORIGIN));
+}
+
 export async function onRequestGet({ request, env }) {
+  if (!isTrusted(request, env)) {
+    return new Response('Forbidden', { status: 403 });
+  }
   const url = new URL(request.url);
   const path = url.pathname.slice(PREFIX.length);
   if (!path.startsWith('/v3/') || path.includes('..')) {

@@ -35,6 +35,14 @@ class EnvService {
   @visibleForTesting
   static void setProxyUrl(String url) => _proxyUrl = url;
 
+  /// Shared secret the proxy accepts from non-browser clients. Pass it at build
+  /// time (`--dart-define=APP_KEY=...`); it is never read from `.env`.
+  static const String appKey = String.fromEnvironment('APP_KEY');
+
+  /// Headers every PTV request needs to be accepted by the proxy.
+  static Map<String, String> get proxyHeaders =>
+      usesProxy && !kIsWeb && appKey.isNotEmpty ? const {'X-Interchange-Key': appKey} : const {};
+
   static void setCredentials({
     required String userId,
     required String apiKey,
@@ -191,7 +199,8 @@ class PtvRealtimeService {
 
   Future<http.Response> _getOnce(String signedUrl) async {
     final request = http.Request('GET', Uri.parse(signedUrl))
-      ..headers.addAll(_defaultHeaders);
+      ..headers.addAll(_defaultHeaders)
+      ..headers.addAll(EnvService.proxyHeaders);
     final streamed = await _client.send(request).timeout(_responseTimeout);
     final bytes =
         await http.ByteStream(streamed.stream.timeout(_idleTimeout)).toBytes();
