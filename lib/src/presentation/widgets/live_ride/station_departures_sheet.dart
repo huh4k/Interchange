@@ -68,9 +68,9 @@ class StationDeparturesSheetState extends State<StationDeparturesSheet> {
               padding: const EdgeInsets.fromLTRB(20, 14, 12, 12),
               child: Row(
                 children: [
-                  const IconTile(
+                  IconTile(
                     icon: Icons.alt_route_rounded,
-                    color: AppColors.primaryCyan,
+                    color: Theme.of(context).colorScheme.primary,
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -84,13 +84,13 @@ class StationDeparturesSheetState extends State<StationDeparturesSheet> {
                           ),
                         ),
                         const SizedBox(height: 4),
-                        const Wrap(
+                        Wrap(
                           spacing: 6,
                           runSpacing: 4,
                           children: [
                             TintPill(
                               label: 'Connecting station',
-                              color: AppColors.primaryCyan,
+                              color: Theme.of(context).colorScheme.primary,
                             ),
                             TintPill(
                               label: 'Ride tracking on',

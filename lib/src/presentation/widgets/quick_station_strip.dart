@@ -48,12 +48,12 @@ class QuickStationStrip extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
                   color: isActive
-                      ? AppColors.primaryCyan
+                      ? Theme.of(context).colorScheme.primary
                       : Theme.of(context).cardColor,
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
                     color: isActive
-                        ? AppColors.primaryCyan
+                        ? Theme.of(context).colorScheme.primary
                         : Theme.of(context).dividerColor.withAlpha(50),
                   ),
                 ),

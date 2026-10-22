@@ -72,7 +72,7 @@ class _DisruptionsScreenState extends State<DisruptionsScreen> {
         actions: [
           TextButton.icon(
             style: TextButton.styleFrom(
-              foregroundColor: AppColors.primaryCyan,
+              foregroundColor: Theme.of(context).colorScheme.primary,
               padding: const EdgeInsets.symmetric(horizontal: 10),
             ),
             icon: Icon(
@@ -107,7 +107,7 @@ class _DisruptionsScreenState extends State<DisruptionsScreen> {
       ),
       body: RefreshIndicator(
         onRefresh: () async => await widget.onRefresh(),
-        color: AppColors.primaryCyan,
+        color: Theme.of(context).colorScheme.primary,
         child: CustomScrollView(
           slivers: [
             // My Stations / All Lines toggle, styled like the mode slider
@@ -134,7 +134,7 @@ class _DisruptionsScreenState extends State<DisruptionsScreen> {
                       _segment(
                         selected: _showAllLines,
                         icon: Icons.alt_route_rounded,
-                        iconColor: AppColors.primaryCyan,
+                        iconColor: Theme.of(context).colorScheme.primary,
                         label: 'All Lines (${allList.length})',
                         onTap: () => setState(() => _showAllLines = true),
                       ),
@@ -156,7 +156,7 @@ class _DisruptionsScreenState extends State<DisruptionsScreen> {
                         label: 'All Alerts',
                         count: displayedAlerts.length,
                         isSelected: _selectedSeverity == null,
-                        color: AppColors.primaryCyan,
+                        color: Theme.of(context).colorScheme.primary,
                         onTap: () => setState(() => _selectedSeverity = null),
                       ),
                       const SizedBox(width: 6),
@@ -215,7 +215,7 @@ class _DisruptionsScreenState extends State<DisruptionsScreen> {
                                 : Icons.star_rounded,
                             size: 16,
                             color: _showAllLines
-                                ? AppColors.primaryCyan
+                                ? Theme.of(context).colorScheme.primary
                                 : AppColors.statusAmber,
                           ),
                           const SizedBox(width: 8),
@@ -244,7 +244,7 @@ class _DisruptionsScreenState extends State<DisruptionsScreen> {
                             for (final st in widget.favoriteStations)
                               TintPill(
                                 label: st.name,
-                                color: AppColors.primaryCyan,
+                                color: Theme.of(context).colorScheme.primary,
                                 icon: Icons.train_rounded,
                               ),
                           ],
@@ -316,8 +316,8 @@ class _DisruptionsScreenState extends State<DisruptionsScreen> {
                           FilledButton.tonalIcon(
                             style: FilledButton.styleFrom(
                               backgroundColor:
-                                  AppColors.primaryCyan.withAlpha(30),
-                              foregroundColor: AppColors.primaryCyan,
+                                  Theme.of(context).colorScheme.primary.withAlpha(30),
+                              foregroundColor: Theme.of(context).colorScheme.primary,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
@@ -422,7 +422,7 @@ class _DisruptionsScreenState extends State<DisruptionsScreen> {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           decoration: BoxDecoration(
-            color: selected ? AppColors.primaryCyan : Colors.transparent,
+            color: selected ? Theme.of(context).colorScheme.primary : Colors.transparent,
             borderRadius: BorderRadius.circular(100),
           ),
           child: Row(

@@ -107,7 +107,7 @@ class _HomeScreenState extends State<HomeScreen> {
     // inset animations don't rebuild the whole sliver tree.
     final Widget content = RefreshIndicator(
       onRefresh: viewModel.loadData,
-      color: AppColors.primaryCyan,
+      color: Theme.of(context).colorScheme.primary,
       child: CustomScrollView(
         slivers: [
           SliverPadding(
@@ -301,7 +301,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     name: st.name,
                     zone: st.zone,
                     icon: Icons.history_rounded,
-                    color: AppColors.primaryCyan,
+                    color: Theme.of(context).colorScheme.primary,
                     isSelected: st.name == viewModel.selectedStation.name,
                     onTap: () {
                       viewModel.selectStation(st);
@@ -498,7 +498,7 @@ class _SavedStationRow extends StatelessWidget {
     return SurfacePanel(
       margin: const EdgeInsets.only(bottom: 8),
       padding: EdgeInsets.fromLTRB(12, 10, trailing == null ? 14 : 4, 10),
-      borderColor: isSelected ? AppColors.primaryCyan.withAlpha(140) : null,
+      borderColor: isSelected ? Theme.of(context).colorScheme.primary.withAlpha(140) : null,
       onTap: onTap,
       child: Row(
         children: [
@@ -586,7 +586,7 @@ class _HeaderSection extends StatelessWidget {
               child: LinearProgressIndicator(
                 value: progress > 0.0 ? progress : null,
                 backgroundColor: theme.cardColor,
-                color: AppColors.primaryCyan,
+                color: Theme.of(context).colorScheme.primary,
                 minHeight: 6,
               ),
             ),

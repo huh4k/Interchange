@@ -147,12 +147,12 @@ class StopConnectionTile extends StatelessWidget {
     );
   }
 
-  Widget? _stateTag() {
+  Widget? _stateTag(BuildContext context) {
     if (isCurrentStop) {
       return const TintPill(label: 'Now', color: AppColors.statusGreen);
     }
     if (isNextStop) {
-      return const TintPill(label: 'Next', color: AppColors.primaryCyan);
+      return TintPill(label: 'Next', color: Theme.of(context).colorScheme.primary);
     }
     return null;
   }
@@ -160,7 +160,7 @@ class StopConnectionTile extends StatelessWidget {
   Widget _localRow(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final highlighted = isCurrentStop || isNextStop;
-    final tag = _stateTag();
+    final tag = _stateTag(context);
 
     return Padding(
       // Tall enough for the time + platform column beside it.
@@ -187,14 +187,14 @@ class StopConnectionTile extends StatelessWidget {
   Widget _interchangeCard(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final tag = _stateTag();
+    final tag = _stateTag(context);
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: SurfacePanel(
         padding: EdgeInsets.zero,
         borderColor: isCurrentStop || isNextStop
-            ? AppColors.primaryCyan.withAlpha(140)
+            ? Theme.of(context).colorScheme.primary.withAlpha(140)
             : null,
         child: Theme(
           data: theme.copyWith(dividerColor: Colors.transparent),
@@ -273,8 +273,8 @@ class StopConnectionTile extends StatelessWidget {
                       width: double.infinity,
                       child: FilledButton.tonalIcon(
                         style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.primaryCyan.withAlpha(30),
-                          foregroundColor: AppColors.primaryCyan,
+                          backgroundColor: Theme.of(context).colorScheme.primary.withAlpha(30),
+                          foregroundColor: Theme.of(context).colorScheme.primary,
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),

@@ -110,7 +110,7 @@ class StationSelectorCard extends StatelessWidget {
     final scheme = theme.colorScheme;
     final accent = activeMode == PtvMode.metroTram
         ? AppColors.melbourneTram
-        : AppColors.primaryCyan;
+        : Theme.of(context).colorScheme.primary;
 
     return Material(
       color: scheme.surface,
@@ -208,9 +208,9 @@ class StationSelectorCard extends StatelessWidget {
             ),
             if (onLocateNearest != null) ...[
               IconButton(
-                icon: const Icon(
+                icon: Icon(
                   Icons.my_location_rounded,
-                  color: AppColors.primaryCyan,
+                  color: Theme.of(context).colorScheme.primary,
                   size: 20,
                 ),
                 onPressed: () async {

@@ -216,7 +216,7 @@ class _LiveRideSheetState extends State<LiveRideSheet> {
                       children: [
                         SectionLabel(
                           isBetweenStops ? 'BETWEEN STOPS' : 'CURRENT STOP',
-                          color: AppColors.primaryCyan,
+                          color: Theme.of(context).colorScheme.primary,
                         ),
                         const SizedBox(height: 4),
                         Text(
@@ -245,19 +245,19 @@ class _LiveRideSheetState extends State<LiveRideSheet> {
                           const SizedBox(height: 10),
                           Row(
                             children: [
-                              const Icon(
+                              Icon(
                                 Icons.arrow_forward_rounded,
                                 size: 16,
-                                color: AppColors.primaryCyan,
+                                color: Theme.of(context).colorScheme.primary,
                               ),
                               const SizedBox(width: 6),
                               Flexible(
                                 child: Text(
                                   '${isBetweenStops ? 'Approaching' : 'Next stop'}: ${nextStation.name}',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w600,
-                                    color: AppColors.primaryCyan,
+                                    color: Theme.of(context).colorScheme.primary,
                                   ),
                                 ),
                               ),

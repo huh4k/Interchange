@@ -232,7 +232,7 @@ class _TripDetailsSheetState extends State<TripDetailsSheet> {
         ),
         duration: const Duration(seconds: 2),
         behavior: SnackBarBehavior.floating,
-        backgroundColor: AppColors.primaryCyan,
+        backgroundColor: Theme.of(context).colorScheme.primary,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
@@ -311,7 +311,7 @@ class _TripDetailsSheetState extends State<TripDetailsSheet> {
                     icon: Icons.schedule_rounded,
                     label: 'Departure',
                     value: timeStr,
-                    color: AppColors.primaryCyan,
+                    color: Theme.of(context).colorScheme.primary,
                   ),
                   VerticalDivider(width: 1, color: scheme.outlineVariant),
                   _buildDetailItem(
@@ -362,7 +362,7 @@ class _TripDetailsSheetState extends State<TripDetailsSheet> {
                     style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
                   ),
                   style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.primaryCyan,
+                    backgroundColor: Theme.of(context).colorScheme.primary,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 15),
                     shape: RoundedRectangleBorder(
@@ -376,13 +376,13 @@ class _TripDetailsSheetState extends State<TripDetailsSheet> {
           // Next Stop
           if (nextStop != null) ...[
             SurfacePanel(
-              accent: AppColors.primaryCyan,
+              accent: Theme.of(context).colorScheme.primary,
               padding: const EdgeInsets.fromLTRB(14, 12, 16, 12),
               child: Row(
                 children: [
-                  const IconTile(
+                  IconTile(
                     icon: Icons.navigation_rounded,
-                    color: AppColors.primaryCyan,
+                    color: Theme.of(context).colorScheme.primary,
                     size: 36,
                   ),
                   const SizedBox(width: 12),
@@ -390,9 +390,9 @@ class _TripDetailsSheetState extends State<TripDetailsSheet> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const SectionLabel(
+                        SectionLabel(
                           'NEXT STOP',
-                          color: AppColors.primaryCyan,
+                          color: Theme.of(context).colorScheme.primary,
                         ),
                         const SizedBox(height: 2),
                         Text(
@@ -411,10 +411,10 @@ class _TripDetailsSheetState extends State<TripDetailsSheet> {
                       final tStr = '${nTime.hour.toString().padLeft(2, '0')}:${nTime.minute.toString().padLeft(2, '0')}';
                       return Text(
                         tStr,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.w800,
                           fontSize: 16,
-                          color: AppColors.primaryCyan,
+                          color: Theme.of(context).colorScheme.primary,
                         ),
                       );
                     }(),

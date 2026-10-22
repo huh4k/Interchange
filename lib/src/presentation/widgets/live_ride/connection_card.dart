@@ -22,7 +22,7 @@ class ConnectionCard extends StatelessWidget {
     final lineCode = departure?.lineCode.isNotEmpty == true
         ? departure!.lineCode
         : conn.connectingTrip.headsign;
-    final lineColor = departure?.type.ptvBrandColor ?? AppColors.primaryCyan;
+    final lineColor = departure?.type.ptvBrandColor ?? Theme.of(context).colorScheme.primary;
     final bufferMins = conn.bufferMinutes;
     final backupColor =
         conn.subsequentFeasibility?.color ?? AppColors.statusGreen;

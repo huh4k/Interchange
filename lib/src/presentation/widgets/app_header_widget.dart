@@ -143,14 +143,14 @@ class AppHeaderWidget extends StatelessWidget {
           onPressed: isLoading ? null : onRefresh,
           tooltip: 'Refresh Feed',
           child: isLoading
-              ? const RepaintBoundary(
+              ? RepaintBoundary(
                   child: SizedBox(
                     width: 18,
                     height: 18,
                     child: CircularProgressIndicator(
                       strokeWidth: 2.2,
                       valueColor: AlwaysStoppedAnimation<Color>(
-                        AppColors.primaryCyan,
+                        Theme.of(context).colorScheme.primary,
                       ),
                     ),
                   ),

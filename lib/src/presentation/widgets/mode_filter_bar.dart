@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../domain/value_objects/transit_type.dart';
-import '../../theme/app_theme.dart';
 
 class ModeFilterBar extends StatelessWidget {
   final TransitType? selectedTypeFilter;
@@ -23,7 +22,7 @@ class ModeFilterBar extends StatelessWidget {
             label: 'All Modes',
             icon: Icons.apps_rounded,
             isSelected: selectedTypeFilter == null,
-            color: AppColors.primaryCyan,
+            color: Theme.of(context).colorScheme.primary,
             onTap: () => onModeSelected(null),
           ),
           const SizedBox(width: 10),

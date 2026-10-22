@@ -81,14 +81,19 @@ class TransitApp extends StatelessWidget {
           ),
       ],
       child: Consumer<ThemeViewModel>(
-        builder: (context, themeVm, _) => MaterialApp(
+        builder: (context, themeVm, _) {
+          final accent = context.select<TransitViewModel, Color>(
+            (vm) => vm.activeMode.transitType.ptvBrandColor,
+          );
+          return MaterialApp(
           title: 'Interchange',
           debugShowCheckedModeBanner: false,
-          theme: AppTheme.lightTheme,
-          darkTheme: AppTheme.darkTheme,
+          theme: AppTheme.lightThemeFor(accent),
+          darkTheme: AppTheme.darkThemeFor(accent),
           themeMode: themeVm.themeMode,
           home: const HomeScreen(),
-        ),
+          );
+        },
       ),
     );
   }

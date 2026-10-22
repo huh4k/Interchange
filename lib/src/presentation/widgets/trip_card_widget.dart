@@ -65,7 +65,7 @@ class TripCardWidget extends StatelessWidget {
         (lineLabel != destinationText || !showBadge);
     final minutesColor = scheduledTime != null && minutesAway <= 0
         ? AppColors.statusGreen
-        : AppColors.primaryCyan;
+        : Theme.of(context).colorScheme.primary;
 
     final leaveByText = leaveBy == null
         ? ''
@@ -171,7 +171,7 @@ class TripCardWidget extends StatelessWidget {
                                   Icons.directions_walk_rounded,
                                   size: 13,
                                   color: reachable
-                                      ? AppColors.primaryCyan
+                                      ? Theme.of(context).colorScheme.primary
                                       : AppColors.statusDelayed,
                                 ),
                                 const SizedBox(width: 4),
@@ -181,7 +181,7 @@ class TripCardWidget extends StatelessWidget {
                                     fontSize: 12,
                                     fontWeight: FontWeight.w700,
                                     color: reachable
-                                        ? AppColors.primaryCyan
+                                        ? Theme.of(context).colorScheme.primary
                                         : AppColors.statusDelayed,
                                   ),
                                 ),

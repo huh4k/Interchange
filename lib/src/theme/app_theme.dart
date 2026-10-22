@@ -29,7 +29,11 @@ class AppColors {
 }
 
 class AppTheme {
-  static ThemeData get darkTheme => _build(
+  static ThemeData get darkTheme => darkThemeFor(AppColors.primaryCyan);
+  static ThemeData get lightTheme => lightThemeFor(AppColors.primaryCyan);
+
+  static ThemeData darkThemeFor(Color accent) => _build(
+    accent: accent,
     brightness: Brightness.dark,
     background: AppColors.darkBackground,
     surface: AppColors.darkSurface,
@@ -39,7 +43,8 @@ class AppTheme {
     muted: const Color(0xFF94A3B8),
   );
 
-  static ThemeData get lightTheme => _build(
+  static ThemeData lightThemeFor(Color accent) => _build(
+    accent: accent,
     brightness: Brightness.light,
     background: AppColors.lightBackground,
     surface: AppColors.lightSurface,
@@ -53,6 +58,7 @@ class AppTheme {
   /// (`surfaceContainerHigh`, `outlineVariant`, `onSurfaceVariant`) instead of
   /// hard-coding per-theme colours.
   static ThemeData _build({
+    required Color accent,
     required Brightness brightness,
     required Color background,
     required Color surface,
@@ -64,7 +70,7 @@ class AppTheme {
     final isDark = brightness == Brightness.dark;
     final scheme = ColorScheme(
       brightness: brightness,
-      primary: AppColors.primaryCyan,
+      primary: accent,
       onPrimary: Colors.white,
       secondary: AppColors.secondaryIndigo,
       onSecondary: Colors.white,
@@ -114,8 +120,8 @@ class AppTheme {
       ),
       chipTheme: ChipThemeData(
         backgroundColor: surface,
-        selectedColor: AppColors.primaryCyan.withAlpha(isDark ? 55 : 40),
-        secondarySelectedColor: AppColors.primaryCyan,
+        selectedColor: accent.withAlpha(isDark ? 55 : 40),
+        secondarySelectedColor: accent,
         labelStyle: const TextStyle(
           fontSize: 13,
           fontWeight: FontWeight.w700,
@@ -143,7 +149,7 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: AppColors.primaryCyan, width: 2),
+          borderSide: BorderSide(color: accent, width: 2),
         ),
         hintStyle: TextStyle(color: muted, fontSize: 14),
         prefixIconColor: muted,
@@ -152,13 +158,13 @@ class AppTheme {
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: surface,
         surfaceTintColor: Colors.transparent,
-        indicatorColor: AppColors.primaryCyan.withAlpha(isDark ? 50 : 36),
+        indicatorColor: accent.withAlpha(isDark ? 50 : 36),
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         height: 68,
         elevation: 0,
         iconTheme: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return const IconThemeData(color: AppColors.primaryCyan, size: 24);
+            return IconThemeData(color: accent, size: 24);
           }
           return IconThemeData(color: muted, size: 24);
         }),

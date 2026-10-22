@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../services/location_service.dart';
-import '../../theme/app_theme.dart';
 import '../state/transit_view_model.dart';
 
 /// Opt-in pill showing the walk from the user to the selected station.
@@ -46,11 +45,11 @@ class WalkTimeChip extends StatelessWidget {
             duration: const Duration(milliseconds: 200),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: active ? AppColors.primaryCyan : theme.cardColor,
+              color: active ? Theme.of(context).colorScheme.primary : theme.cardColor,
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
                 color: active
-                    ? AppColors.primaryCyan
+                    ? Theme.of(context).colorScheme.primary
                     : theme.dividerColor.withAlpha(50),
               ),
             ),

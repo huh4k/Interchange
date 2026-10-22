@@ -226,20 +226,20 @@ class _StationSearchSheetState extends State<StationSearchSheet> {
               width: double.infinity,
               child: OutlinedButton.icon(
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.primaryCyan,
-                  side: const BorderSide(color: AppColors.primaryCyan),
+                  foregroundColor: Theme.of(context).colorScheme.primary,
+                  side: BorderSide(color: Theme.of(context).colorScheme.primary),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                   padding: const EdgeInsets.symmetric(vertical: 8),
                 ),
                 icon: _isLocating
-                    ? const SizedBox(
+                    ? SizedBox(
                         width: 14,
                         height: 14,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: AppColors.primaryCyan,
+                          color: Theme.of(context).colorScheme.primary,
                         ),
                       )
                     : const Icon(Icons.my_location_rounded, size: 16),
@@ -296,11 +296,11 @@ class _StationSearchSheetState extends State<StationSearchSheet> {
                   avatar: const Icon(Icons.star_rounded, size: 16, color: AppColors.statusAmber),
                   label: Text(st.name),
                   backgroundColor: isSelected
-                      ? AppColors.primaryCyan.withAlpha(40)
+                      ? Theme.of(context).colorScheme.primary.withAlpha(40)
                       : theme.cardColor,
                   side: BorderSide(
                     color: isSelected
-                        ? AppColors.primaryCyan
+                        ? Theme.of(context).colorScheme.primary
                         : theme.dividerColor.withAlpha(50),
                   ),
                   onPressed: () => widget.onStationSelected(st),
@@ -343,11 +343,11 @@ class _StationSearchSheetState extends State<StationSearchSheet> {
                   avatar: const Icon(Icons.history_rounded, size: 16, color: AppColors.secondaryIndigo),
                   label: Text(st.name),
                   backgroundColor: isSelected
-                      ? AppColors.primaryCyan.withAlpha(40)
+                      ? Theme.of(context).colorScheme.primary.withAlpha(40)
                       : theme.cardColor,
                   side: BorderSide(
                     color: isSelected
-                        ? AppColors.primaryCyan
+                        ? Theme.of(context).colorScheme.primary
                         : theme.dividerColor.withAlpha(50),
                   ),
                   onPressed: () => widget.onStationSelected(st),
@@ -400,13 +400,13 @@ class _StationSearchSheetState extends State<StationSearchSheet> {
                       margin: const EdgeInsets.symmetric(vertical: 4),
                       elevation: 0,
                       color: isSelected
-                          ? AppColors.primaryCyan.withAlpha(20)
+                          ? Theme.of(context).colorScheme.primary.withAlpha(20)
                           : theme.cardColor,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
                         side: BorderSide(
                           color: isSelected
-                              ? AppColors.primaryCyan
+                              ? Theme.of(context).colorScheme.primary
                               : theme.dividerColor.withAlpha(35),
                         ),
                       ),
@@ -417,7 +417,7 @@ class _StationSearchSheetState extends State<StationSearchSheet> {
                             color: isSelected
                                 ? (widget.activeMode == PtvMode.metroTram
                                     ? AppColors.melbourneTram
-                                    : AppColors.primaryCyan)
+                                    : Theme.of(context).colorScheme.primary)
                                 : theme.dividerColor.withAlpha(20),
                             borderRadius: BorderRadius.circular(12),
                           ),
@@ -432,7 +432,7 @@ class _StationSearchSheetState extends State<StationSearchSheet> {
                                 ? Colors.white
                                 : (widget.activeMode == PtvMode.metroTram
                                     ? AppColors.melbourneTram
-                                    : AppColors.primaryCyan),
+                                    : Theme.of(context).colorScheme.primary),
                           ),
                         ),
                         title: Row(
@@ -454,18 +454,18 @@ class _StationSearchSheetState extends State<StationSearchSheet> {
                                   vertical: 2,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: AppColors.primaryCyan.withAlpha(25),
+                                  color: Theme.of(context).colorScheme.primary.withAlpha(25),
                                   borderRadius: BorderRadius.circular(6),
                                   border: Border.all(
-                                    color: AppColors.primaryCyan.withAlpha(60),
+                                    color: Theme.of(context).colorScheme.primary.withAlpha(60),
                                     width: 0.8,
                                   ),
                                 ),
                                 child: Text(
                                   LocationService.formatDistance(distanceMeters),
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 10,
-                                    color: AppColors.primaryCyan,
+                                    color: Theme.of(context).colorScheme.primary,
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
