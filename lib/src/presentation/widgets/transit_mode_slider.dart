@@ -28,6 +28,13 @@ class TransitModeSlider extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final activeIndex = modes.indexOf(activeMode).clamp(0, modes.length - 1);
     final activeColor = modes[activeIndex].transitType.ptvBrandColor;
+    final hsl = HSLColor.fromColor(activeColor);
+    final lighter = hsl
+        .withLightness((hsl.lightness + 0.08).clamp(0.0, 1.0))
+        .toColor();
+    final darker = hsl
+        .withLightness((hsl.lightness - 0.10).clamp(0.0, 1.0))
+        .toColor();
 
     // Compute alignment: -1.0 = far left, +1.0 = far right
     final double xAlign = modes.length > 1
@@ -54,7 +61,11 @@ class TransitModeSlider extends StatelessWidget {
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 250),
                 decoration: BoxDecoration(
-                  color: activeColor,
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [lighter, darker],
+                  ),
                   borderRadius: BorderRadius.circular(100),
                   boxShadow: [
                     BoxShadow(
