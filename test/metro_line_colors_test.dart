@@ -6,9 +6,9 @@ import 'package:interchange/src/domain/value_objects/transit_type.dart';
 
 void main() {
   test('metro lines resolve by name or code', () {
-    expect(metroLineColor(name: 'Frankston'), const Color(0xFF009B77));
-    expect(metroLineColor(code: 'sun'), const Color(0xFFFFBE00));
-    expect(metroLineColor(name: 'Mernda Line'), const Color(0xFFE11B22));
+    expect(metroLineColor(name: 'Frankston'), const Color(0xFF028430));
+    expect(metroLineColor(code: 'sun'), const Color(0xFF279FD5));
+    expect(metroLineColor(name: 'Mernda Line'), const Color(0xFFBE1014));
     expect(metroLineColor(name: 'Unknown'), isNull);
   });
 

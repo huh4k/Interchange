@@ -4,23 +4,23 @@ import 'transit_type.dart';
 
 /// Official colours for Melbourne metro train lines, keyed by line name.
 const Map<String, ({String code, Color color})> _metroLines = {
-  'alamein': (code: 'ALM', color: Color(0xFF0072CE)),
-  'belgrave': (code: 'BEL', color: Color(0xFF0072CE)),
+  'alamein': (code: 'ALM', color: Color(0xFF152C6B)),
+  'belgrave': (code: 'BEL', color: Color(0xFF152C6B)),
   'craigieburn': (code: 'CGB', color: Color(0xFFFFBE00)),
-  'cranbourne': (code: 'CRN', color: Color(0xFF009B77)),
-  'frankston': (code: 'FKN', color: Color(0xFF009B77)),
-  'glen waverley': (code: 'GLW', color: Color(0xFF0072CE)),
-  'hurstbridge': (code: 'HUR', color: Color(0xFFE11B22)),
-  'lilydale': (code: 'LIL', color: Color(0xFF0072CE)),
-  'mernda': (code: 'MER', color: Color(0xFFE11B22)),
-  'pakenham': (code: 'PAK', color: Color(0xFF009B77)),
-  'sandringham': (code: 'SAN', color: Color(0xFFF37021)),
-  'stony point': (code: 'STY', color: Color(0xFF009B77)),
-  'sunbury': (code: 'SUN', color: Color(0xFFFFBE00)),
+  'cranbourne': (code: 'CRN', color: Color(0xFF279FD5)),
+  'frankston': (code: 'FKN', color: Color(0xFF028430)),
+  'glen waverley': (code: 'GLW', color: Color(0xFF152C6B)),
+  'hurstbridge': (code: 'HUR', color: Color(0xFFBE1014)),
+  'lilydale': (code: 'LIL', color: Color(0xFF152C6B)),
+  'mernda': (code: 'MER', color: Color(0xFFBE1014)),
+  'pakenham': (code: 'PAK', color: Color(0xFF279FD5)),
+  'sandringham': (code: 'SAN', color: Color(0xFFF178AF)),
+  'stony point': (code: 'STY', color: Color(0xFF028430)),
+  'sunbury': (code: 'SUN', color: Color(0xFF279FD5)),
   'upfield': (code: 'UPF', color: Color(0xFFFFBE00)),
-  'werribee': (code: 'WER', color: Color(0xFF009B77)),
-  'williamstown': (code: 'WIL', color: Color(0xFF009B77)),
-  'flemington': (code: 'FLM', color: Color(0xFFFFBE00)),
+  'werribee': (code: 'WER', color: Color(0xFFF178AF)),
+  'williamstown': (code: 'WIL', color: Color(0xFFF178AF)),
+  'flemington': (code: 'FLM', color: Color(0xFF95979A)),
 };
 
 /// The colour of a metro train line from its [name] or 3-letter [code]
