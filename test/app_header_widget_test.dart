@@ -17,7 +17,7 @@ void main() {
       ),
     );
 
-    expect(find.byIcon(Icons.train_rounded), findsAtLeastNWidgets(1));
+    expect(find.byIcon(Icons.subway_rounded), findsAtLeastNWidgets(1));
     expect(find.byIcon(Icons.tram_rounded), findsNothing);
   });
 
@@ -35,7 +35,7 @@ void main() {
     );
 
     expect(find.byIcon(Icons.tram_rounded), findsAtLeastNWidgets(1));
-    expect(find.byIcon(Icons.train_rounded), findsNothing);
+    expect(find.byIcon(Icons.subway_rounded), findsNothing);
   });
 
   testWidgets('AppHeaderWidget renders theme toggle button and responds to tap', (tester) async {
