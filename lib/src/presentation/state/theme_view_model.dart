@@ -5,7 +5,7 @@ import '../../services/settings_service.dart';
 class ThemeViewModel extends ChangeNotifier {
   final SettingsService _settingsService;
 
-  ThemeMode _themeMode = ThemeMode.system;
+  ThemeMode _themeMode = ThemeMode.dark;
 
   ThemeViewModel(this._settingsService);
 

@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:transit_app/src/services/ptv_rt_service.dart';
+import 'package:interchange/src/services/ptv_rt_service.dart';
 
 String _utc(DateTime t) => t.toUtc().toIso8601String();
 

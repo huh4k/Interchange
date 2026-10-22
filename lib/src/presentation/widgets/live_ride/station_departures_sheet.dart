@@ -3,6 +3,7 @@ import '../../../domain/entities/station.dart';
 import '../../../domain/entities/trips.dart';
 import '../../../theme/app_theme.dart';
 import '../../state/transit_view_model.dart';
+import '../common/ui_kit.dart';
 import '../trip_card_widget.dart';
 import '../trip_details_sheet.dart';
 
@@ -61,22 +62,15 @@ class StationDeparturesSheetState extends State<StationDeparturesSheet> {
         return Column(
           children: [
             // Header
+            const SizedBox(height: 12),
+            const SheetHandle(),
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              padding: const EdgeInsets.fromLTRB(20, 14, 12, 12),
               child: Row(
                 children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryCyan.withAlpha(30),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.alt_route_rounded,
-                      color: AppColors.primaryCyan,
-                      size: 20,
-                    ),
+                  const IconTile(
+                    icon: Icons.alt_route_rounded,
+                    color: AppColors.primaryCyan,
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -85,50 +79,23 @@ class StationDeparturesSheetState extends State<StationDeparturesSheet> {
                       children: [
                         Text(
                           station.name,
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            fontSize: 19,
                           ),
                         ),
-                        Row(
+                        const SizedBox(height: 4),
+                        const Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
                           children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 1,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppColors.primaryCyan.withAlpha(25),
-                                borderRadius: BorderRadius.circular(5),
-                              ),
-                              child: const Text(
-                                'CONNECTING STATION',
-                                style: TextStyle(
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.primaryCyan,
-                                  letterSpacing: 0.6,
-                                ),
-                              ),
+                            TintPill(
+                              label: 'Connecting station',
+                              color: AppColors.primaryCyan,
                             ),
-                            const SizedBox(width: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 1,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppColors.statusGreen.withAlpha(25),
-                                borderRadius: BorderRadius.circular(5),
-                              ),
-                              child: const Text(
-                                'RIDE TRACKING ACTIVE',
-                                style: TextStyle(
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.statusGreen,
-                                  letterSpacing: 0.6,
-                                ),
-                              ),
+                            TintPill(
+                              label: 'Ride tracking on',
+                              color: AppColors.statusGreen,
+                              dot: true,
                             ),
                           ],
                         ),
@@ -137,7 +104,6 @@ class StationDeparturesSheetState extends State<StationDeparturesSheet> {
                   ),
                   IconButton(
                     icon: const Icon(Icons.refresh_rounded),
-                    color: AppColors.primaryCyan,
                     tooltip: 'Refresh departures',
                     onPressed: () {
                       setState(() => _isLoading = true);
@@ -149,11 +115,11 @@ class StationDeparturesSheetState extends State<StationDeparturesSheet> {
             ),
             Divider(
               height: 1,
-              color: theme.dividerColor.withAlpha(40),
+              color: theme.colorScheme.outlineVariant,
               indent: 20,
               endIndent: 20,
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 8),
 
             // Departures list
             Expanded(
@@ -169,20 +135,18 @@ class StationDeparturesSheetState extends State<StationDeparturesSheet> {
                             Icon(
                               Icons.train_outlined,
                               size: 48,
-                              color: Colors.grey.withAlpha(120),
+                              color: theme.colorScheme.onSurfaceVariant,
                             ),
                             const SizedBox(height: 12),
                             Text(
                               'No departures found',
-                              style: theme.textTheme.titleSmall?.copyWith(
-                                color: Colors.grey,
-                              ),
+                              style: theme.textTheme.titleSmall,
                             ),
                             const SizedBox(height: 6),
                             Text(
                               'No upcoming departures at ${station.name} in the next hour.',
                               style: theme.textTheme.bodySmall?.copyWith(
-                                color: Colors.grey,
+                                color: theme.colorScheme.onSurfaceVariant,
                               ),
                               textAlign: TextAlign.center,
                             ),

@@ -6,8 +6,8 @@ import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:transit_app/src/data/datasources/gtfs_zip_extractor.dart';
-import 'package:transit_app/src/data/repositories/gtfs_repository.dart';
+import 'package:interchange/src/data/datasources/gtfs_zip_extractor.dart';
+import 'package:interchange/src/data/repositories/gtfs_repository.dart';
 
 Uint8List _modeZip(String tag) {
   final zip = Archive();

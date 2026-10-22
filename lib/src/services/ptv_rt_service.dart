@@ -29,7 +29,8 @@ class EnvService {
   static bool get hasLocalKey => !kReleaseMode && userId.isNotEmpty && apiKey.isNotEmpty;
 
   static bool get usesProxy => kIsWeb || !hasLocalKey;
-  static String get proxyBase => kIsWeb ? '${Uri.base.origin}/api/ptv' : _proxyUrl;
+  static String get proxyBase =>
+      kIsWeb && !const bool.hasEnvironment('PTV_PROXY_URL') ? '${Uri.base.origin}/api/ptv' : _proxyUrl;
   static bool get isConfigured => !usesProxy || proxyBase.isNotEmpty;
 
   @visibleForTesting

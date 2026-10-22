@@ -3,11 +3,11 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
-import 'package:transit_app/src/data/datasources/gtfs_index_engine.dart';
-import 'package:transit_app/src/domain/entities/station.dart';
-import 'package:transit_app/src/domain/entities/transit_route.dart';
-import 'package:transit_app/src/services/gtfs_parser.dart';
-import 'package:transit_app/src/services/melbourne_gtfs_service.dart';
+import 'package:interchange/src/data/datasources/gtfs_index_engine.dart';
+import 'package:interchange/src/domain/entities/station.dart';
+import 'package:interchange/src/domain/entities/transit_route.dart';
+import 'package:interchange/src/services/gtfs_parser.dart';
+import 'package:interchange/src/services/melbourne_gtfs_service.dart';
 
 class _MockHttpClient extends http.BaseClient {
   final Future<http.StreamedResponse> Function(http.BaseRequest request) _handler;

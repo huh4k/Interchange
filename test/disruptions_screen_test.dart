@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:transit_app/src/domain/entities/station.dart';
-import 'package:transit_app/src/domain/entities/transit_route.dart';
-import 'package:transit_app/src/presentation/screens/disruptions_screen.dart';
+import 'package:interchange/src/domain/entities/station.dart';
+import 'package:interchange/src/domain/entities/transit_route.dart';
+import 'package:interchange/src/presentation/screens/disruptions_screen.dart';
 
 void main() {
   const stationFss = Station(

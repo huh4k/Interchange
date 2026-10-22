@@ -3,13 +3,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart' show Position;
 import 'package:gtfs_bindings/schedule.dart' as gtfs;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:transit_app/src/data/repositories/gtfs_repository.dart';
-import 'package:transit_app/src/domain/entities/station.dart';
-import 'package:transit_app/src/domain/entities/transit_route.dart';
-import 'package:transit_app/src/domain/entities/trips.dart';
-import 'package:transit_app/src/presentation/state/transit_view_model.dart';
-import 'package:transit_app/src/presentation/widgets/walk_time_chip.dart';
-import 'package:transit_app/src/services/location_service.dart';
+import 'package:interchange/src/data/repositories/gtfs_repository.dart';
+import 'package:interchange/src/domain/entities/station.dart';
+import 'package:interchange/src/domain/entities/transit_route.dart';
+import 'package:interchange/src/domain/entities/trips.dart';
+import 'package:interchange/src/presentation/state/transit_view_model.dart';
+import 'package:interchange/src/presentation/widgets/walk_time_chip.dart';
+import 'package:interchange/src/services/location_service.dart';
 
 class _NoDataRepository implements IGtfsRepository {
   @override

@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:transit_app/src/domain/entities/service.dart';
-import 'package:transit_app/src/domain/entities/station.dart';
-import 'package:transit_app/src/domain/entities/trips.dart';
-import 'package:transit_app/src/domain/value_objects/transit_type.dart';
-import 'package:transit_app/src/presentation/widgets/trip_details_sheet.dart';
-import 'package:transit_app/src/services/ptv_rt_service.dart';
+import 'package:interchange/src/domain/entities/service.dart';
+import 'package:interchange/src/domain/entities/station.dart';
+import 'package:interchange/src/domain/entities/trips.dart';
+import 'package:interchange/src/domain/value_objects/transit_type.dart';
+import 'package:interchange/src/presentation/widgets/trip_details_sheet.dart';
+import 'package:interchange/src/services/ptv_rt_service.dart';
 
 void main() {
   // Keep the sheet offline: with credentials unset, pattern lookups return

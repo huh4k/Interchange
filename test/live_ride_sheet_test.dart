@@ -2,16 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:gtfs_bindings/schedule.dart' as gtfs;
-import 'package:transit_app/src/data/repositories/gtfs_repository.dart';
-import 'package:transit_app/src/domain/entities/service.dart';
-import 'package:transit_app/src/domain/entities/station.dart';
-import 'package:transit_app/src/domain/entities/transit_route.dart';
-import 'package:transit_app/src/domain/entities/trips.dart';
+import 'package:interchange/src/data/repositories/gtfs_repository.dart';
+import 'package:interchange/src/domain/entities/service.dart';
+import 'package:interchange/src/domain/entities/station.dart';
+import 'package:interchange/src/domain/entities/transit_route.dart';
+import 'package:interchange/src/domain/entities/trips.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:transit_app/src/presentation/state/transit_view_model.dart';
-import 'package:transit_app/src/presentation/widgets/live_ride_sheet.dart';
-import 'package:transit_app/src/services/location_service.dart';
-import 'package:transit_app/src/services/ptv_rt_service.dart';
+import 'package:interchange/src/presentation/state/transit_view_model.dart';
+import 'package:interchange/src/presentation/widgets/live_ride_sheet.dart';
+import 'package:interchange/src/services/location_service.dart';
+import 'package:interchange/src/services/ptv_rt_service.dart';
 
 class _MockRepoForLiveRide implements IGtfsRepository {
   @override

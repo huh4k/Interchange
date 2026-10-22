@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:transit_app/src/domain/entities/station.dart';
-import 'package:transit_app/src/domain/value_objects/transit_type.dart';
-import 'package:transit_app/src/services/connection_service.dart';
+import 'package:interchange/src/domain/entities/station.dart';
+import 'package:interchange/src/domain/value_objects/transit_type.dart';
+import 'package:interchange/src/services/connection_service.dart';
 
 void main() {
   group('ConnectionService Tests', () {

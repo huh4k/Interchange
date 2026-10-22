@@ -18,17 +18,17 @@ class SettingsService {
     await prefs.setBool(_walkTimeKey, enabled);
   }
 
-  /// Reads the stored [ThemeMode]. Defaults to [ThemeMode.system].
+  /// Reads the stored [ThemeMode]. Defaults to [ThemeMode.dark].
   Future<ThemeMode> getThemeMode() async {
     final prefs = await SharedPreferences.getInstance();
     final stored = prefs.getString(_themeModeKey);
     switch (stored) {
       case 'light':
         return ThemeMode.light;
-      case 'dark':
-        return ThemeMode.dark;
-      default:
+      case 'system':
         return ThemeMode.system;
+      default:
+        return ThemeMode.dark;
     }
   }
 

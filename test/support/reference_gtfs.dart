@@ -4,13 +4,13 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:path/path.dart' as p;
-import 'package:transit_app/src/core/gtfs_csv.dart';
-import 'package:transit_app/src/data/datasources/gtfs_index_engine.dart';
-import 'package:transit_app/src/domain/entities/service.dart';
-import 'package:transit_app/src/domain/entities/station.dart';
-import 'package:transit_app/src/domain/entities/transit_route.dart';
-import 'package:transit_app/src/domain/entities/trips.dart';
-import 'package:transit_app/src/services/melbourne_gtfs_service.dart';
+import 'package:interchange/src/core/gtfs_csv.dart';
+import 'package:interchange/src/data/datasources/gtfs_index_engine.dart';
+import 'package:interchange/src/domain/entities/service.dart';
+import 'package:interchange/src/domain/entities/station.dart';
+import 'package:interchange/src/domain/entities/transit_route.dart';
+import 'package:interchange/src/domain/entities/trips.dart';
+import 'package:interchange/src/services/melbourne_gtfs_service.dart';
 
 class ReferenceGtfs {
   static Future<List<Trip>> parseTripsFromDirectory(

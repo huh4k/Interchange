@@ -7,6 +7,7 @@ import '../../services/ptv_rt_service.dart';
 import '../../services/connection_service.dart';
 import '../../theme/app_theme.dart';
 import '../state/transit_view_model.dart';
+import 'common/ui_kit.dart';
 import 'live_ride_sheet.dart';
 
 class TripDetailsSheet extends StatefulWidget {
@@ -251,121 +252,88 @@ class _TripDetailsSheetState extends State<TripDetailsSheet> {
         : '--:--';
     final nextStop = _nextStop;
 
+    final scheme = theme.colorScheme;
+
     return SingleChildScrollView(
       controller: widget.scrollController,
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Center(
-            child: Container(
-              width: 40,
-              height: 5,
-              decoration: BoxDecoration(
-                color: Colors.grey.withAlpha(80),
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
+          const SheetHandle(),
+          const SizedBox(height: 18),
 
           // Header with Line Badge, Route Name & Share Action
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: badgeColor,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: badgeColor.withAlpha(80),
-                      blurRadius: 8,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Text(
-                  lineCode,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 16,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 14),
+              LineBadge(code: lineCode, color: badgeColor, large: true),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       'To ${widget.trip.destinationName}',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: theme.textTheme.titleLarge?.copyWith(fontSize: 20),
                     ),
                     if (departure?.routeName.isNotEmpty ?? false)
                       Text(
                         departure!.routeName,
                         style: TextStyle(
-                          color: theme.textTheme.bodyMedium?.color?.withAlpha(150),
-                          fontSize: 12,
+                          color: scheme.onSurfaceVariant,
+                          fontSize: 13,
                         ),
                       ),
                   ],
                 ),
               ),
               IconButton(
-                icon: const Icon(Icons.share_rounded, size: 22),
-                color: AppColors.primaryCyan,
+                icon: const Icon(Icons.share_rounded, size: 20),
                 tooltip: 'Share / Copy trip details',
+                style: IconButton.styleFrom(
+                  backgroundColor: scheme.surfaceContainerHigh,
+                  foregroundColor: scheme.onSurface,
+                  side: BorderSide(color: scheme.outlineVariant),
+                ),
                 onPressed: () => _copyTripItinerary(context),
               ),
             ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 18),
 
-          // Quick Summary Cards (Departure, Platform, Status)
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: theme.cardColor,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: theme.dividerColor.withAlpha(40),
+          // Quick Summary (Departure, Platform, Status)
+          SurfacePanel(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            child: IntrinsicHeight(
+              child: Row(
+                children: [
+                  _buildDetailItem(
+                    icon: Icons.schedule_rounded,
+                    label: 'Departure',
+                    value: timeStr,
+                    color: AppColors.primaryCyan,
+                  ),
+                  VerticalDivider(width: 1, color: scheme.outlineVariant),
+                  _buildDetailItem(
+                    icon: Icons.signpost_rounded,
+                    label: 'Platform',
+                    value: departure?.platform.isNotEmpty == true
+                        ? 'Plat ${departure!.platform}'
+                        : 'TBA',
+                    color: scheme.onSurfaceVariant,
+                  ),
+                  VerticalDivider(width: 1, color: scheme.outlineVariant),
+                  _buildDetailItem(
+                    icon: Icons.check_circle_outline_rounded,
+                    label: 'Status',
+                    value: departure?.status.label ?? 'On Time',
+                    color: departure?.status.color ?? AppColors.statusGreen,
+                  ),
+                ],
               ),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildDetailItem(
-                  icon: Icons.schedule_rounded,
-                  label: 'Departure',
-                  value: timeStr,
-                  color: AppColors.primaryCyan,
-                ),
-                _buildDetailItem(
-                  icon: Icons.directions_railway_rounded,
-                  label: 'Platform',
-                  value: departure?.platform.isNotEmpty == true
-                      ? 'Plat ${departure!.platform}'
-                      : 'TBA',
-                  color: AppColors.secondaryIndigo,
-                ),
-                _buildDetailItem(
-                  icon: Icons.check_circle_outline_rounded,
-                  label: 'Status',
-                  value: departure?.status.label ?? 'On Time',
-                  color: departure?.status.color ?? AppColors.statusGreen,
-                ),
-              ],
-            ),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 16),
 
           // Primary Track My Ride Action Button
           if (widget.viewModel != null)
@@ -373,7 +341,7 @@ class _TripDetailsSheetState extends State<TripDetailsSheet> {
               padding: const EdgeInsets.only(bottom: 16),
               child: SizedBox(
                 width: double.infinity,
-                child: ElevatedButton.icon(
+                child: FilledButton.icon(
                   onPressed: () {
                     final vm = widget.viewModel!;
                     final tripWithStops = widget.trip.copyWith(
@@ -391,65 +359,47 @@ class _TripDetailsSheetState extends State<TripDetailsSheet> {
                   icon: const Icon(Icons.gps_fixed_rounded, size: 20),
                   label: const Text(
                     'Track My Ride & Live Connections',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
                   ),
-                  style: ElevatedButton.styleFrom(
+                  style: FilledButton.styleFrom(
                     backgroundColor: AppColors.primaryCyan,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    padding: const EdgeInsets.symmetric(vertical: 15),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),
-                    elevation: 3,
                   ),
                 ),
               ),
             ),
 
-          // Prominent Next Stop Banner
+          // Next Stop
           if (nextStop != null) ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: AppColors.primaryCyan.withAlpha(20),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: AppColors.primaryCyan.withAlpha(70),
-                ),
-              ),
+            SurfacePanel(
+              accent: AppColors.primaryCyan,
+              padding: const EdgeInsets.fromLTRB(14, 12, 16, 12),
               child: Row(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryCyan,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(
-                      Icons.navigation_rounded,
-                      color: Colors.white,
-                      size: 18,
-                    ),
+                  const IconTile(
+                    icon: Icons.navigation_rounded,
+                    color: AppColors.primaryCyan,
+                    size: 36,
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
+                        const SectionLabel(
                           'NEXT STOP',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.8,
-                            color: AppColors.primaryCyan,
-                          ),
+                          color: AppColors.primaryCyan,
                         ),
+                        const SizedBox(height: 2),
                         Text(
                           nextStop['name'] as String? ?? 'Upcoming Stop',
                           style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15,
                           ),
                         ),
                       ],
@@ -462,8 +412,8 @@ class _TripDetailsSheetState extends State<TripDetailsSheet> {
                       return Text(
                         tStr,
                         style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 16,
                           color: AppColors.primaryCyan,
                         ),
                       );
@@ -472,14 +422,13 @@ class _TripDetailsSheetState extends State<TripDetailsSheet> {
                 ],
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
           ],
 
           Text(
             'Route Stop Sequence & Connections',
-            style: theme.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.bold,
-              letterSpacing: 0.5,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w800,
             ),
           ),
           const SizedBox(height: 14),
@@ -498,7 +447,7 @@ class _TripDetailsSheetState extends State<TripDetailsSheet> {
               subtitle: 'Origin Station • Departs $timeStr',
               isFirst: true,
               isLast: false,
-              color: AppColors.primaryCyan,
+              color: badgeColor,
               currentLineCode: lineCode,
             ),
             _buildTimelineItem(
@@ -558,9 +507,7 @@ class _TripDetailsSheetState extends State<TripDetailsSheet> {
                   subtitle: sub,
                   isFirst: isFirst,
                   isLast: isLast,
-                  color: isFirst
-                      ? AppColors.primaryCyan
-                      : (isLast ? badgeColor : Colors.grey),
+                  color: badgeColor,
                   currentLineCode: lineCode,
                 );
               }(),
@@ -577,21 +524,21 @@ class _TripDetailsSheetState extends State<TripDetailsSheet> {
     required String value,
     required Color color,
   }) {
-    return Column(
-      children: [
-        Icon(icon, color: color, size: 22),
-        const SizedBox(height: 6),
-        Text(
-          label,
-          style: const TextStyle(fontSize: 11, color: Colors.grey),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          value,
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-          overflow: TextOverflow.ellipsis,
-        ),
-      ],
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+    return Expanded(
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(height: 6),
+          Text(label, style: TextStyle(fontSize: 11, color: muted)),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
     );
   }
 
@@ -609,43 +556,62 @@ class _TripDetailsSheetState extends State<TripDetailsSheet> {
       currentLineCode: currentLineCode,
     );
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    final theme = Theme.of(context);
+    final endpoint = isFirst || isLast;
+    // Same rail-and-dot timeline as the live ride sheet.
+    const dotCenter = 10.0;
+
+    return Stack(
       children: [
-        Column(
-          children: [
-            Container(
-              width: 14,
-              height: 14,
-              decoration: BoxDecoration(
-                color: color,
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 2),
+        if (!isFirst)
+          Positioned(
+            left: 6.5,
+            top: 0,
+            height: dotCenter,
+            child: Container(width: 3, color: color.withAlpha(110)),
+          ),
+        if (!isLast)
+          Positioned(
+            left: 6.5,
+            top: dotCenter,
+            bottom: 0,
+            child: Container(width: 3, color: color.withAlpha(110)),
+          ),
+        Positioned(
+          left: 0,
+          top: dotCenter - 8,
+          child: Container(
+            width: 16,
+            height: 16,
+            decoration: BoxDecoration(
+              color: endpoint ? color : theme.scaffoldBackgroundColor,
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: endpoint ? theme.scaffoldBackgroundColor : color,
+                width: 3,
               ),
             ),
-            if (!isLast)
-              Container(
-                width: 2,
-                height: connections.isNotEmpty ? 70 : 40,
-                color: Colors.grey.withAlpha(80),
-              ),
-          ],
+          ),
         ),
-        const SizedBox(width: 14),
-        Expanded(
+        Padding(
+          padding: const EdgeInsets.only(left: 30),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 title,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
+                style: TextStyle(
+                  fontWeight: endpoint ? FontWeight.w700 : FontWeight.w500,
+                  fontSize: 14.5,
                 ),
               ),
+              const SizedBox(height: 1),
               Text(
                 subtitle,
-                style: const TextStyle(fontSize: 11, color: Colors.grey),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
 
               // Possible Connections Section at this stop
@@ -654,41 +620,17 @@ class _TripDetailsSheetState extends State<TripDetailsSheet> {
                 Wrap(
                   spacing: 6,
                   runSpacing: 4,
-                  children: connections.map((conn) {
-                    return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: conn.type.ptvBrandColor.withAlpha(25),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                          color: conn.type.ptvBrandColor.withAlpha(80),
-                          width: 0.8,
-                        ),
+                  children: [
+                    for (final conn in connections)
+                      TintPill(
+                        label: conn.title,
+                        color: conn.type.ptvBrandColor,
+                        icon: conn.type.icon,
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            conn.type.icon,
-                            size: 11,
-                            color: conn.type.ptvBrandColor,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            conn.title,
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: conn.type.ptvBrandColor,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }).toList(),
+                  ],
                 ),
               ],
-              const SizedBox(height: 16),
+              const SizedBox(height: 18),
             ],
           ),
         ),

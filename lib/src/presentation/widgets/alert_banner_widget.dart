@@ -10,62 +10,58 @@ class AlertBannerWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // PTV often repeats the title as the description; only show new detail.
+    final title = alert.title.trim();
+    final description = alert.description.trim();
+    final showDescription =
+        description.isNotEmpty && !description.startsWith(title);
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(12, 12, 14, 12),
       decoration: BoxDecoration(
-        color: AppColors.statusAmber.withAlpha(35),
+        color: AppColors.statusAmber.withAlpha(28),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: AppColors.statusAmber.withAlpha(120),
-          width: 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.statusAmber.withAlpha(30),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        border: Border.all(color: AppColors.statusAmber.withAlpha(90)),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: AppColors.statusAmber.withAlpha(50),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(
+          const Padding(
+            padding: EdgeInsets.only(top: 1),
+            child: Icon(
               Icons.warning_amber_rounded,
               color: AppColors.statusAmber,
-              size: 24,
+              size: 20,
             ),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  alert.title,
+                  showDescription || description.isEmpty ? title : description,
                   style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14,
-                    letterSpacing: 0.2,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13.5,
+                    height: 1.35,
                   ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  alert.description,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: theme.textTheme.bodyMedium?.color?.withAlpha(210),
-                    fontWeight: FontWeight.w500,
-                  ),
-                  maxLines: 2,
+                  maxLines: 3,
                   overflow: TextOverflow.ellipsis,
                 ),
+                if (showDescription) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    description,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      height: 1.35,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ],
             ),
           ),
@@ -74,4 +70,3 @@ class AlertBannerWidget extends StatelessWidget {
     );
   }
 }
-

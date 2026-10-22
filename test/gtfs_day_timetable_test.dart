@@ -1,10 +1,10 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:transit_app/src/data/datasources/gtfs_day_timetable.dart';
-import 'package:transit_app/src/data/repositories/gtfs_repository.dart';
-import 'package:transit_app/src/domain/entities/station.dart';
-import 'package:transit_app/src/domain/entities/trips.dart';
+import 'package:interchange/src/data/datasources/gtfs_day_timetable.dart';
+import 'package:interchange/src/data/repositories/gtfs_repository.dart';
+import 'package:interchange/src/domain/entities/station.dart';
+import 'package:interchange/src/domain/entities/trips.dart';
 
 import 'support/reference_gtfs.dart';
 
