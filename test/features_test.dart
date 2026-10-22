@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:transit_app/src/domain/entities/station.dart';
-import 'package:transit_app/src/domain/entities/transit_route.dart';
-import 'package:transit_app/src/domain/entities/trips.dart';
-import 'package:transit_app/src/presentation/screens/disruptions_screen.dart';
-import 'package:transit_app/src/presentation/widgets/trip_card_widget.dart';
-import 'package:transit_app/src/presentation/widgets/trip_details_sheet.dart';
-import 'package:transit_app/src/services/favorite_service.dart';
-import 'package:transit_app/src/services/location_service.dart';
-import 'package:transit_app/src/theme/app_theme.dart';
+import 'package:interchange/src/domain/entities/station.dart';
+import 'package:interchange/src/domain/entities/transit_route.dart';
+import 'package:interchange/src/domain/entities/trips.dart';
+import 'package:interchange/src/presentation/screens/disruptions_screen.dart';
+import 'package:interchange/src/presentation/widgets/trip_card_widget.dart';
+import 'package:interchange/src/presentation/widgets/trip_details_sheet.dart';
+import 'package:interchange/src/services/favorite_service.dart';
+import 'package:interchange/src/services/location_service.dart';
+import 'package:interchange/src/theme/app_theme.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

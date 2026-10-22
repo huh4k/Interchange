@@ -7,6 +7,7 @@ import '../state/theme_view_model.dart';
 import '../widgets/active_ride_mini_player.dart';
 import '../widgets/alert_banner_widget.dart';
 import '../widgets/app_header_widget.dart';
+import '../widgets/common/ui_kit.dart';
 import '../widgets/empty_state_widget.dart';
 import '../widgets/quick_station_strip.dart';
 import '../widgets/walk_time_chip.dart';
@@ -250,16 +251,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 horizontal: 20.0,
                 vertical: 8.0,
               ),
-              sliver: SliverToBoxAdapter(
-                child: Text(
-                  'FAVORITE STATIONS',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.0,
-                    color: theme.textTheme.bodySmall?.color?.withAlpha(150),
-                  ),
-                ),
+              sliver: const SliverToBoxAdapter(
+                child: SectionLabel('FAVORITE STATIONS'),
               ),
             ),
             SliverPadding(
@@ -267,33 +260,21 @@ class _HomeScreenState extends State<HomeScreen> {
               sliver: SliverList(
                 delegate: SliverChildBuilderDelegate((context, index) {
                   final st = viewModel.favoriteStations[index];
-                  final isSelected = st.name == viewModel.selectedStation.name;
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 8.0),
-                    child: ListTile(
-                      leading: const Icon(
-                        Icons.star_rounded,
-                        color: AppColors.statusAmber,
-                      ),
-                      title: Text(
-                        st.name,
-                        style: TextStyle(
-                          fontWeight: isSelected
-                              ? FontWeight.bold
-                              : FontWeight.w600,
-                        ),
-                      ),
-                      subtitle: Text(st.zone.isNotEmpty ? st.zone : 'Zone 1'),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.close_rounded, size: 18),
-                        onPressed: () => viewModel.toggleFavoriteStation(st),
-                        tooltip: 'Remove Favorite',
-                      ),
-                      onTap: () {
-                        viewModel.selectStation(st);
-                        viewModel.selectNavIndex(0);
-                      },
+                  return _SavedStationRow(
+                    name: st.name,
+                    zone: st.zone,
+                    icon: Icons.star_rounded,
+                    color: AppColors.statusAmber,
+                    isSelected: st.name == viewModel.selectedStation.name,
+                    trailing: IconButton(
+                      icon: const Icon(Icons.close_rounded, size: 18),
+                      onPressed: () => viewModel.toggleFavoriteStation(st),
+                      tooltip: 'Remove Favorite',
                     ),
+                    onTap: () {
+                      viewModel.selectStation(st);
+                      viewModel.selectNavIndex(0);
+                    },
                   );
                 }, childCount: viewModel.favoriteStations.length),
               ),
@@ -307,16 +288,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 horizontal: 20.0,
                 vertical: 8.0,
               ),
-              sliver: SliverToBoxAdapter(
-                child: Text(
-                  'RECENT STATIONS',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.0,
-                    color: theme.textTheme.bodySmall?.color?.withAlpha(150),
-                  ),
-                ),
+              sliver: const SliverToBoxAdapter(
+                child: SectionLabel('RECENT STATIONS'),
               ),
             ),
             SliverPadding(
@@ -324,28 +297,16 @@ class _HomeScreenState extends State<HomeScreen> {
               sliver: SliverList(
                 delegate: SliverChildBuilderDelegate((context, index) {
                   final st = viewModel.recentStations[index];
-                  final isSelected = st.name == viewModel.selectedStation.name;
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 8.0),
-                    child: ListTile(
-                      leading: const Icon(
-                        Icons.history_rounded,
-                        color: AppColors.secondaryIndigo,
-                      ),
-                      title: Text(
-                        st.name,
-                        style: TextStyle(
-                          fontWeight: isSelected
-                              ? FontWeight.bold
-                              : FontWeight.w600,
-                        ),
-                      ),
-                      subtitle: Text(st.zone.isNotEmpty ? st.zone : 'Zone 1'),
-                      onTap: () {
-                        viewModel.selectStation(st);
-                        viewModel.selectNavIndex(0);
-                      },
-                    ),
+                  return _SavedStationRow(
+                    name: st.name,
+                    zone: st.zone,
+                    icon: Icons.history_rounded,
+                    color: AppColors.primaryCyan,
+                    isSelected: st.name == viewModel.selectedStation.name,
+                    onTap: () {
+                      viewModel.selectStation(st);
+                      viewModel.selectNavIndex(0);
+                    },
                   );
                 }, childCount: viewModel.recentStations.length),
               ),
@@ -366,35 +327,22 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   Expanded(
                     child: Text(
-                      isSavedView
-                          ? 'Saved Departures'
-                          : 'Scheduled Departures • ${viewModel.selectedStation.name}',
+                      isSavedView ? 'Saved Departures' : 'Next departures',
                       style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w800,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: theme.cardColor,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: theme.dividerColor.withAlpha(40),
-                      ),
-                    ),
-                    child: Text(
-                      '${displayedTrips.length} trips',
+                  if (!viewModel.isLoading)
+                    Text(
+                      '${displayedTrips.length} '
+                      '${displayedTrips.length == 1 ? 'service' : 'services'}',
                       style: theme.textTheme.bodySmall?.copyWith(
                         fontWeight: FontWeight.w600,
-                        color: AppColors.primaryCyan,
+                        color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ),
-                  ),
                 ],
               ),
             ),
@@ -520,6 +468,69 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ],
+    );
+  }
+}
+
+/// A favourite or recent station on the Saved tab.
+class _SavedStationRow extends StatelessWidget {
+  final String name;
+  final String zone;
+  final IconData icon;
+  final Color color;
+  final bool isSelected;
+  final Widget? trailing;
+  final VoidCallback onTap;
+
+  const _SavedStationRow({
+    required this.name,
+    required this.zone,
+    required this.icon,
+    required this.color,
+    required this.isSelected,
+    this.trailing,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return SurfacePanel(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: EdgeInsets.fromLTRB(12, 10, trailing == null ? 14 : 4, 10),
+      borderColor: isSelected ? AppColors.primaryCyan.withAlpha(140) : null,
+      onTap: onTap,
+      child: Row(
+        children: [
+          IconTile(icon: icon, color: color, size: 38),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                  ),
+                ),
+                Text(
+                  zone.isNotEmpty ? zone : 'Zone 1',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          trailing ??
+              Icon(Icons.chevron_right_rounded, color: scheme.onSurfaceVariant),
+        ],
+      ),
     );
   }
 }

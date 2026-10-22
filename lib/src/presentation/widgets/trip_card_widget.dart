@@ -55,7 +55,17 @@ class TripCardWidget extends StatelessWidget {
     // "Scheduled" on every card is noise.
     final showStatus = status != ServiceStatus.scheduled;
     final statusTextColor = _getStatusTextColor(status);
-    final mutedColor = theme.textTheme.bodySmall?.color?.withAlpha(200);
+    final mutedColor = theme.colorScheme.onSurfaceVariant;
+    // Short codes (tram routes, "FKN") read well as a badge; long line names
+    // ("Frankston") would just repeat the destination, so they become a
+    // coloured line label under it instead.
+    final showBadge = lineCode.length <= 4;
+    final lineLabel = routeName.isNotEmpty ? routeName : lineCode;
+    final showLineLabel = lineLabel.isNotEmpty &&
+        (lineLabel != destinationText || !showBadge);
+    final minutesColor = scheduledTime != null && minutesAway <= 0
+        ? AppColors.statusGreen
+        : AppColors.primaryCyan;
 
     final leaveByText = leaveBy == null
         ? ''
@@ -89,36 +99,41 @@ class TripCardWidget extends StatelessWidget {
         child: Opacity(
           opacity: leaveBy != null && !reachable ? 0.55 : 1,
           child: Card(
-          margin: const EdgeInsets.only(bottom: 12.0),
+          margin: const EdgeInsets.only(bottom: 10.0),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: onTap,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 4, 14),
+            child: Container(
+              decoration: BoxDecoration(
+                border: Border(left: BorderSide(color: badgeColor, width: 4)),
+              ),
+              padding: const EdgeInsets.fromLTRB(14, 12, 4, 12),
               child: Row(
                 children: [
-                  Container(
-                    constraints: const BoxConstraints(minWidth: 48),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 8,
-                    ),
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: badgeColor,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      lineCode,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 14,
-                        letterSpacing: 0.5,
+                  if (showBadge) ...[
+                    Container(
+                      constraints: const BoxConstraints(minWidth: 44),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 7,
+                      ),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: badgeColor,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        lineCode,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 14,
+                          letterSpacing: 0.3,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
+                    const SizedBox(width: 12),
+                  ],
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -126,19 +141,22 @@ class TripCardWidget extends StatelessWidget {
                         Text(
                           destinationText,
                           style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 16,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        if (routeName.isNotEmpty &&
-                            routeName != destinationText)
+                        if (showLineLabel)
                           Padding(
                             padding: const EdgeInsets.only(top: 2.0),
                             child: Text(
-                              routeName,
-                              style: TextStyle(fontSize: 12, color: mutedColor),
+                              showBadge ? lineLabel : '$lineLabel line',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: showBadge ? mutedColor : badgeColor,
+                              ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -239,18 +257,19 @@ class TripCardWidget extends StatelessWidget {
                           children: [
                             Text(
                               minutesLabel,
-                              style: const TextStyle(
-                                color: AppColors.primaryCyan,
-                                fontWeight: FontWeight.w900,
+                              style: TextStyle(
+                                color: minutesColor,
+                                fontWeight: FontWeight.w800,
                                 fontSize: 24,
+                                letterSpacing: -0.5,
                               ),
                             ),
                             if (showMinutesUnit) ...[
                               const SizedBox(width: 3),
-                              const Text(
+                              Text(
                                 'min',
                                 style: TextStyle(
-                                  color: AppColors.primaryCyan,
+                                  color: minutesColor,
                                   fontWeight: FontWeight.w700,
                                   fontSize: 12,
                                 ),

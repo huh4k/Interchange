@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:transit_app/src/domain/entities/station.dart';
-import 'package:transit_app/src/services/favorite_service.dart';
+import 'package:interchange/src/domain/entities/station.dart';
+import 'package:interchange/src/services/favorite_service.dart';
 
 void main() {
   group('FavoriteService Tests', () {

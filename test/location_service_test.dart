@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:transit_app/src/domain/entities/station.dart';
-import 'package:transit_app/src/services/location_service.dart';
+import 'package:interchange/src/domain/entities/station.dart';
+import 'package:interchange/src/services/location_service.dart';
 
 void main() {
   group('LocationService Tests', () {

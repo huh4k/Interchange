@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:transit_app/src/domain/entities/station.dart';
-import 'package:transit_app/src/domain/value_objects/ptv_mode.dart';
-import 'package:transit_app/src/presentation/widgets/station_search_sheet.dart';
+import 'package:interchange/src/domain/entities/station.dart';
+import 'package:interchange/src/domain/value_objects/ptv_mode.dart';
+import 'package:interchange/src/presentation/widgets/station_search_sheet.dart';
 
 void main() {
   const stations = [

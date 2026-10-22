@@ -5,6 +5,7 @@ import '../../domain/value_objects/transit_type.dart';
 import '../../services/connection_service.dart';
 import '../../theme/app_theme.dart';
 import '../state/transit_view_model.dart';
+import 'common/ui_kit.dart';
 import 'live_ride/station_departures_sheet.dart';
 import 'live_ride/stop_connection_tile.dart';
 
@@ -51,17 +52,24 @@ class _LiveRideSheetState extends State<LiveRideSheet> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final viewModel = widget.viewModel;
     final trip = viewModel.activeTrackedTrip;
+    const sheetShape = BorderRadius.vertical(top: Radius.circular(28));
 
     if (trip == null) {
       return Container(
         height: 200,
         decoration: BoxDecoration(
           color: theme.scaffoldBackgroundColor,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          borderRadius: sheetShape,
         ),
-        child: const Center(child: Text('No active service being tracked')),
+        child: Center(
+          child: Text(
+            'No active service being tracked',
+            style: TextStyle(color: scheme.onSurfaceVariant),
+          ),
+        ),
       );
     }
 
@@ -81,6 +89,8 @@ class _LiveRideSheetState extends State<LiveRideSheet> {
             : trip.departure?.type == TransitType.regionalTrain
                 ? 'V/LINE'
                 : 'METRO');
+    final lineColor =
+        trip.departure?.type.ptvBrandColor ?? AppColors.melbourneMetro;
     final destination = trip.destinationName;
 
     // Filter trip stops to only show the boarding station and following stations
@@ -109,332 +119,208 @@ class _LiveRideSheetState extends State<LiveRideSheet> {
       return isInterchange && conns.isNotEmpty;
     }).toList();
 
+    final visibleStops = upcomingJourneyStops
+        .where(
+          (s) =>
+              _focusedStationName == null ||
+              s.station.name.toLowerCase() ==
+                  _focusedStationName!.toLowerCase(),
+        )
+        .toList();
+
+    final mutedStyle = TextStyle(fontSize: 13, color: scheme.onSurfaceVariant);
+
     return Container(
       height: MediaQuery.of(context).size.height * 0.88,
       decoration: BoxDecoration(
         color: theme.scaffoldBackgroundColor,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(80),
-            blurRadius: 20,
-            spreadRadius: 5,
-          ),
-        ],
+        borderRadius: sheetShape,
       ),
       child: Column(
         children: [
-          // Drag Handle
           const SizedBox(height: 12),
-          Container(
-            width: 44,
-            height: 4,
-            decoration: BoxDecoration(
-              color: theme.dividerColor.withAlpha(60),
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
+          const SheetHandle(),
           const SizedBox(height: 14),
 
-          // Header
+          // Header: live state + end action, then the service itself
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.statusGreen.withAlpha(30),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: AppColors.statusGreen,
-                          width: 1.2,
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: const BoxDecoration(
-                              color: AppColors.statusGreen,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          const Text(
-                            'LIVE ON-BOARD',
-                            style: TextStyle(
-                              color: AppColors.statusGreen,
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0.8,
-                            ),
-                          ),
-                        ],
-                      ),
+                    const TintPill(
+                      label: 'LIVE ON-BOARD',
+                      color: AppColors.statusGreen,
+                      dot: true,
                     ),
-                    const SizedBox(width: 10),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
+                    const Spacer(),
+                    TextButton.icon(
+                      onPressed: () {
+                        viewModel.stopTracking();
+                        Navigator.of(context).pop();
+                      },
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.statusRose,
+                        backgroundColor: AppColors.statusRose.withAlpha(24),
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
                       ),
-                      decoration: BoxDecoration(
-                        color: AppColors.primaryCyan,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        lineCode,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
+                      icon: const Icon(Icons.stop_rounded, size: 18),
+                      label: const Text(
+                        'End Tracking',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),
                   ],
                 ),
-                TextButton.icon(
-                  onPressed: () {
-                    viewModel.stopTracking();
-                    Navigator.of(context).pop();
-                  },
-                  icon: const Icon(
-                    Icons.stop_circle_outlined,
-                    size: 18,
-                    color: AppColors.statusRose,
-                  ),
-                  label: const Text(
-                    'End Tracking',
-                    style: TextStyle(color: AppColors.statusRose, fontSize: 13),
-                  ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    LineBadge(code: lineCode, color: lineColor, large: true),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Service to $destination',
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontSize: 20,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
 
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'Service to $destination',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                ),
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 10),
+          const SizedBox(height: 16),
 
           // Scrollable Content
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
               children: [
-                // Current Stop Callout Card
+                // Where the rider is right now
                 if (currentStation != null || nextStation != null)
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 16),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          AppColors.primaryCyan.withAlpha(35),
-                          AppColors.secondaryIndigo.withAlpha(25),
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(
-                        color: AppColors.primaryCyan.withAlpha(80),
-                        width: 1.5,
-                      ),
-                    ),
-                    child: Row(
+                  SurfacePanel(
+                    accent: lineColor,
+                    margin: const EdgeInsets.only(bottom: 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: AppColors.primaryCyan.withAlpha(50),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.directions_railway_rounded,
-                            color: AppColors.primaryCyan,
-                            size: 26,
+                        SectionLabel(
+                          isBetweenStops ? 'BETWEEN STOPS' : 'CURRENT STOP',
+                          color: AppColors.primaryCyan,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          isBetweenStops && currentStation != null
+                              ? '${currentStation.name} → ${nextStation!.name}'
+                              : (currentStation ?? nextStation)!.name,
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            fontSize: 19,
                           ),
                         ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                        if (isBetweenStops) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            'Departed: ${currentStation!.name}',
+                            style: mutedStyle,
+                          ),
+                        ] else if (previousStation != null) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            'Departed: ${previousStation.name}',
+                            style: mutedStyle,
+                          ),
+                        ],
+                        if (nextStation != null &&
+                            nextStation.name != currentStation?.name) ...[
+                          const SizedBox(height: 10),
+                          Row(
                             children: [
-                              Text(
-                                isBetweenStops ? 'BETWEEN STOPS' : 'CURRENT STOP',
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 1.0,
-                                  color: AppColors.primaryCyan,
-                                ),
+                              const Icon(
+                                Icons.arrow_forward_rounded,
+                                size: 16,
+                                color: AppColors.primaryCyan,
                               ),
-                              const SizedBox(height: 2),
-                              Text(
-                                isBetweenStops && currentStation != null
-                                    ? '${currentStation.name} → ${nextStation!.name}'
-                                    : (currentStation ?? nextStation)!.name,
-                                style: theme.textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 17,
-                                ),
-                              ),
-                              if (isBetweenStops) ...[
-                                const SizedBox(height: 2),
-                                Text(
-                                  'Departed: ${currentStation!.name}',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: theme.textTheme.bodySmall?.color
-                                        ?.withAlpha(160),
-                                  ),
-                                ),
-                              ] else if (previousStation != null) ...[
-                                const SizedBox(height: 2),
-                                Text(
-                                  'Departed: ${previousStation.name}',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: theme.textTheme.bodySmall?.color
-                                        ?.withAlpha(160),
-                                  ),
-                                ),
-                              ],
-                              if (nextStation != null &&
-                                  nextStation.name != currentStation?.name) ...[
-                                const SizedBox(height: 2),
-                                Text(
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
                                   '${isBetweenStops ? 'Approaching' : 'Next stop'}: ${nextStation.name}',
                                   style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w500,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
                                     color: AppColors.primaryCyan,
                                   ),
                                 ),
-                              ],
+                              ),
                             ],
                           ),
-                        ),
+                        ],
                       ],
                     ),
                   ),
 
-                // Upcoming Interchange Station Filter Chips
+                // Jump to an upcoming interchange
                 if (stopsWithConnections.isNotEmpty) ...[
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'SELECT UPCOMING INTERCHANGE STATION',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.8,
-                        color: theme.textTheme.bodySmall?.color?.withAlpha(160),
-                      ),
-                    ),
-                  ),
+                  const SectionLabel('JUMP TO INTERCHANGE'),
                   const SizedBox(height: 8),
                   SizedBox(
-                    height: 38,
+                    height: 34,
                     child: ListView(
                       scrollDirection: Axis.horizontal,
                       children: [
-                        Padding(
-                          padding: const EdgeInsets.only(right: 6),
-                          child: ChoiceChip(
-                            label: const Text(
-                              'All Upcoming Stops',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            selected: _focusedStationName == null,
-                            onSelected: (selected) {
-                              if (selected) {
-                                setState(() => _focusedStationName = null);
-                              }
-                            },
-                          ),
+                        SelectPill(
+                          label: 'All stops',
+                          selected: _focusedStationName == null,
+                          onTap: () =>
+                              setState(() => _focusedStationName = null),
                         ),
                         ...stopsWithConnections.map((stop) {
                           final stName = stop.station.name;
                           final conns = connectionsByStation[stName] ?? [];
                           final isSelected = _focusedStationName == stName;
-
                           return Padding(
-                            padding: const EdgeInsets.only(right: 6),
-                            child: ChoiceChip(
-                              avatar: Icon(
-                                Icons.alt_route_rounded,
-                                size: 14,
-                                color: isSelected
-                                    ? Colors.white
-                                    : AppColors.primaryCyan,
-                              ),
-                              label: Text(
-                                '$stName (${conns.length})',
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
+                            padding: const EdgeInsets.only(left: 6),
+                            child: SelectPill(
+                              icon: Icons.alt_route_rounded,
+                              label: '$stName (${conns.length})',
                               selected: isSelected,
-                              onSelected: (selected) {
-                                setState(() {
-                                  _focusedStationName = selected
-                                      ? stName
-                                      : null;
-                                });
-                              },
+                              onTap: () => setState(() {
+                                _focusedStationName =
+                                    isSelected ? null : stName;
+                              }),
                             ),
                           );
                         }),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 20),
                 ],
 
-                // Connection Advisory Section Header
+                // Stops & connections header
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      _focusedStationName != null
-                          ? 'CONNECTIONS AT $_focusedStationName'.toUpperCase()
-                          : 'UPCOMING STOPS & CONNECTIONS',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.8,
-                        color: theme.textTheme.bodySmall?.color?.withAlpha(160),
+                    Expanded(
+                      child: SectionLabel(
+                        _focusedStationName != null
+                            ? 'CONNECTIONS AT $_focusedStationName'
+                                .toUpperCase()
+                            : 'UPCOMING STOPS & CONNECTIONS',
                       ),
                     ),
                     if (isLoadingConnections)
                       const SizedBox(
-                        width: 14,
-                        height: 14,
+                        width: 16,
+                        height: 16,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     else
@@ -442,52 +328,42 @@ class _LiveRideSheetState extends State<LiveRideSheet> {
                         icon: const Icon(Icons.refresh_rounded, size: 18),
                         onPressed: viewModel.refreshUpcomingConnections,
                         tooltip: 'Refresh Connections',
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
+                        visualDensity: VisualDensity.compact,
                       ),
                   ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
 
-                // Stops & Connection Cards List
+                // Stop timeline
                 if (upcomingJourneyStops.isEmpty)
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: theme.cardColor,
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: const Text(
+                  SurfacePanel(
+                    child: Text(
                       'No intermediate stopping points available for this run.',
+                      style: mutedStyle,
                     ),
                   )
                 else
-                  ...upcomingJourneyStops
-                      .where(
-                        (s) =>
-                            _focusedStationName == null ||
-                            s.station.name.toLowerCase() ==
-                                _focusedStationName!.toLowerCase(),
-                      )
-                      .map((serviceStop) {
-                        final station = serviceStop.station;
-                        final connections =
-                            connectionsByStation[station.name] ?? [];
-
-                        return StopConnectionTile(
-                          station: station,
-                          platform: serviceStop.platform ?? '',
-                          departureTime: serviceStop.departureTime,
-                          connections: connections,
-                          isCurrentStop:
-                              currentStation?.isSameStopAs(station) ?? false,
-                          isNextStop:
-                              nextStation?.isSameStopAs(station) ?? false,
-                          hasFocused: _focusedStationName != null,
-                          onShowDepartures: (st) =>
-                              _showStationDepartures(context, st),
-                        );
-                      }),
+                  for (var i = 0; i < visibleStops.length; i++)
+                    StopConnectionTile(
+                      station: visibleStops[i].station,
+                      platform: visibleStops[i].platform ?? '',
+                      departureTime: visibleStops[i].departureTime,
+                      connections:
+                          connectionsByStation[visibleStops[i].station.name] ??
+                              [],
+                      isCurrentStop:
+                          currentStation?.isSameStopAs(visibleStops[i].station) ??
+                              false,
+                      isNextStop:
+                          nextStation?.isSameStopAs(visibleStops[i].station) ??
+                              false,
+                      hasFocused: _focusedStationName != null,
+                      isFirst: i == 0,
+                      isLast: i == visibleStops.length - 1,
+                      lineColor: lineColor,
+                      onShowDepartures: (st) =>
+                          _showStationDepartures(context, st),
+                    ),
               ],
             ),
           ),
@@ -504,7 +380,7 @@ class _LiveRideSheetState extends State<LiveRideSheet> {
       isScrollControlled: true,
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       builder: (ctx) =>
           StationDeparturesSheet(station: station, viewModel: widget.viewModel),

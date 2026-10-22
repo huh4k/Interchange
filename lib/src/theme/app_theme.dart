@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 
 class AppColors {
   static const Color darkBackground = Color(0xFF0A0E1A);
-  static const Color darkSurface = Color(0xFF141D35);
-  static const Color darkCard = Color(0xFF1F2B47);
+  static const Color darkSurface = Color(0xFF121A2E);
+  static const Color darkCard = Color(0xFF1A2440);
+  static const Color darkBorder = Color(0xFF243150);
 
-  static const Color lightBackground = Color(0xFFF8FAFB);
+  static const Color lightBackground = Color(0xFFF4F6FA);
   static const Color lightSurface = Color(0xFFFFFFFF);
-  static const Color lightCard = Color(0xFFF0F4F9);
+  static const Color lightCard = Color(0xFFEDF1F7);
+  static const Color lightBorder = Color(0xFFE1E7F0);
 
   static const Color primaryCyan = Color(0xFF00B4D8);
   static const Color secondaryIndigo = Color(0xFF6366F1);
@@ -27,124 +29,92 @@ class AppColors {
 }
 
 class AppTheme {
-  static ThemeData get darkTheme {
-    return ThemeData(
-      useMaterial3: true,
-      brightness: Brightness.dark,
-      scaffoldBackgroundColor: AppColors.darkBackground,
-      colorScheme: const ColorScheme.dark(
-        primary: AppColors.primaryCyan,
-        secondary: AppColors.secondaryIndigo,
-        surface: AppColors.darkSurface,
-        onSurface: Colors.white,
-        error: AppColors.statusRose,
+  static ThemeData get darkTheme => _build(
+    brightness: Brightness.dark,
+    background: AppColors.darkBackground,
+    surface: AppColors.darkSurface,
+    surfaceHigh: AppColors.darkCard,
+    border: AppColors.darkBorder,
+    onSurface: const Color(0xFFF1F5F9),
+    muted: const Color(0xFF94A3B8),
+  );
+
+  static ThemeData get lightTheme => _build(
+    brightness: Brightness.light,
+    background: AppColors.lightBackground,
+    surface: AppColors.lightSurface,
+    surfaceHigh: AppColors.lightCard,
+    border: AppColors.lightBorder,
+    onSurface: const Color(0xFF0F172A),
+    muted: const Color(0xFF64748B),
+  );
+
+  /// One builder for both brightnesses. Widgets read these roles
+  /// (`surfaceContainerHigh`, `outlineVariant`, `onSurfaceVariant`) instead of
+  /// hard-coding per-theme colours.
+  static ThemeData _build({
+    required Brightness brightness,
+    required Color background,
+    required Color surface,
+    required Color surfaceHigh,
+    required Color border,
+    required Color onSurface,
+    required Color muted,
+  }) {
+    final isDark = brightness == Brightness.dark;
+    final scheme = ColorScheme(
+      brightness: brightness,
+      primary: AppColors.primaryCyan,
+      onPrimary: Colors.white,
+      secondary: AppColors.secondaryIndigo,
+      onSecondary: Colors.white,
+      error: AppColors.statusRose,
+      onError: Colors.white,
+      surface: surface,
+      onSurface: onSurface,
+      onSurfaceVariant: muted,
+      surfaceContainerLow: surface,
+      surfaceContainer: surface,
+      surfaceContainerHigh: surfaceHigh,
+      surfaceContainerHighest: surfaceHigh,
+      outline: muted.withAlpha(120),
+      outlineVariant: border,
+    );
+    final base = ThemeData(useMaterial3: true, brightness: brightness);
+    final textTheme = base.textTheme.copyWith(
+      titleLarge: base.textTheme.titleLarge?.copyWith(
+        fontWeight: FontWeight.w800,
+        letterSpacing: -0.3,
       ),
-      appBarTheme: const AppBarTheme(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: false,
-      ),
-      cardTheme: CardThemeData(
-        color: AppColors.darkSurface,
-        elevation: 1,
-        shadowColor: Colors.black45,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
-          side: const BorderSide(color: Color(0xFF2A3A56), width: 1.2),
-        ),
-      ),
-      chipTheme: ChipThemeData(
-        backgroundColor: AppColors.darkSurface,
-        selectedColor: AppColors.primaryCyan.withAlpha(55),
-        secondarySelectedColor: AppColors.primaryCyan,
-        labelStyle: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.3,
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(30),
-          side: const BorderSide(color: Color(0xFF2A3A56), width: 1.2),
-        ),
-      ),
-      inputDecorationTheme: InputDecorationTheme(
-        filled: true,
-        fillColor: AppColors.darkSurface,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
-          borderSide: BorderSide.none,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
-          borderSide: const BorderSide(color: Color(0xFF2A3A56), width: 1.2),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
-          borderSide: const BorderSide(color: AppColors.primaryCyan, width: 2),
-        ),
-        hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
-        prefixIconColor: AppColors.primaryCyan,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      ),
-      navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: AppColors.darkSurface,
-        indicatorColor: AppColors.primaryCyan.withAlpha(50),
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        elevation: 12,
-        shadowColor: Colors.black.withAlpha(80),
-        iconTheme: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) {
-            return const IconThemeData(color: AppColors.primaryCyan, size: 26);
-          }
-          return const IconThemeData(color: Color(0xFF94A3B8), size: 24);
-        }),
-        labelTextStyle: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) {
-            return const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.2,
-            );
-          }
-          return const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-          );
-        }),
+      titleMedium: base.textTheme.titleMedium?.copyWith(
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.1,
       ),
     );
-  }
 
-  static ThemeData get lightTheme {
     return ThemeData(
       useMaterial3: true,
-      brightness: Brightness.light,
-      scaffoldBackgroundColor: AppColors.lightBackground,
-      colorScheme: const ColorScheme.light(
-        primary: AppColors.primaryCyan,
-        secondary: AppColors.secondaryIndigo,
-        surface: AppColors.lightSurface,
-        onSurface: Color(0xFF0F172A),
-        error: AppColors.statusRose,
-      ),
+      brightness: brightness,
+      colorScheme: scheme,
+      textTheme: textTheme,
+      scaffoldBackgroundColor: background,
+      dividerColor: border,
       appBarTheme: const AppBarTheme(
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: false,
       ),
       cardTheme: CardThemeData(
-        color: AppColors.lightSurface,
-        elevation: 1,
-        shadowColor: Colors.black12,
+        color: surface,
+        elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
-          side: const BorderSide(color: Color(0xFFE2E8F0), width: 1.2),
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: border),
         ),
       ),
       chipTheme: ChipThemeData(
-        backgroundColor: AppColors.lightCard,
-        selectedColor: AppColors.primaryCyan.withAlpha(40),
+        backgroundColor: surface,
+        selectedColor: AppColors.primaryCyan.withAlpha(isDark ? 55 : 40),
         secondarySelectedColor: AppColors.primaryCyan,
         labelStyle: const TextStyle(
           fontSize: 13,
@@ -154,51 +124,50 @@ class AppTheme {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(30),
-          side: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
+          side: BorderSide(color: border),
         ),
+      ),
+      iconButtonTheme: IconButtonThemeData(
+        style: IconButton.styleFrom(foregroundColor: muted),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: AppColors.lightSurface,
+        fillColor: surface,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
-          borderSide: const BorderSide(color: Color(0xFFE2E8F0), width: 1.2),
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: border),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(color: AppColors.primaryCyan, width: 2),
         ),
-        hintStyle: const TextStyle(color: Color(0xFF64748B), fontSize: 14),
-        prefixIconColor: AppColors.primaryCyan,
+        hintStyle: TextStyle(color: muted, fontSize: 14),
+        prefixIconColor: muted,
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: AppColors.lightSurface,
-        indicatorColor: AppColors.primaryCyan.withAlpha(40),
+        backgroundColor: surface,
+        surfaceTintColor: Colors.transparent,
+        indicatorColor: AppColors.primaryCyan.withAlpha(isDark ? 50 : 36),
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        elevation: 12,
-        shadowColor: Colors.black.withAlpha(20),
+        height: 68,
+        elevation: 0,
         iconTheme: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return const IconThemeData(color: AppColors.primaryCyan, size: 26);
+            return const IconThemeData(color: AppColors.primaryCyan, size: 24);
           }
-          return const IconThemeData(color: Color(0xFF64748B), size: 24);
+          return IconThemeData(color: muted, size: 24);
         }),
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) {
-            return const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.2,
-            );
-          }
-          return const TextStyle(
+          final selected = states.contains(WidgetState.selected);
+          return TextStyle(
             fontSize: 12,
-            fontWeight: FontWeight.w600,
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+            color: selected ? onSurface : muted,
           );
         }),
       ),

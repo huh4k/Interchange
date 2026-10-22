@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:transit_app/src/data/datasources/gtfs_index_engine.dart';
-import 'package:transit_app/src/domain/entities/station.dart';
-import 'package:transit_app/src/presentation/widgets/station_selector_card.dart';
+import 'package:interchange/src/data/datasources/gtfs_index_engine.dart';
+import 'package:interchange/src/domain/entities/station.dart';
+import 'package:interchange/src/presentation/widgets/station_selector_card.dart';
 
 Station _st(String id, String name, {bool loop = false, String? stopId}) => Station(
       id: id,

@@ -5,8 +5,8 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:transit_app/src/data/repositories/gtfs_repository.dart';
-import 'package:transit_app/src/services/melbourne_gtfs_service.dart';
+import 'package:interchange/src/data/repositories/gtfs_repository.dart';
+import 'package:interchange/src/services/melbourne_gtfs_service.dart';
 
 const _header = 'stop_id,stop_name,stop_lat,stop_lon,stop_url,location_type,parent_station';
 String _csv(String name, String id) =>

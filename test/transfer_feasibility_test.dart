@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:transit_app/src/domain/value_objects/transfer_feasibility.dart';
+import 'package:interchange/src/domain/value_objects/transfer_feasibility.dart';
 
 void main() {
   group('TransferFeasibility Tests', () {

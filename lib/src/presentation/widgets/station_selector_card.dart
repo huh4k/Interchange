@@ -107,8 +107,19 @@ class StationSelectorCard extends StatelessWidget {
       (f) => f.id == matchingStation.id || f.name.toLowerCase() == matchingStation.name.toLowerCase(),
     );
 
-    return InkWell(
-      borderRadius: BorderRadius.circular(18),
+    final scheme = theme.colorScheme;
+    final accent = activeMode == PtvMode.metroTram
+        ? AppColors.melbourneTram
+        : AppColors.primaryCyan;
+
+    return Material(
+      color: scheme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: scheme.outlineVariant),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
       onTap: () {
         StationSearchSheet.show(
           context,
@@ -123,92 +134,51 @@ class StationSelectorCard extends StatelessWidget {
           onToggleFavorite: onToggleFavorite ?? (_) {},
         );
       },
-      child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 14,
-        ),
-        decoration: BoxDecoration(
-          color: theme.brightness == Brightness.dark
-              ? const Color(0xFF1F2B47)
-              : const Color(0xFFF0F4F9),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: theme.brightness == Brightness.dark
-                ? const Color(0xFF2A3A56)
-                : const Color(0xFFD0DDE8),
-            width: 1.2,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withAlpha(8),
-              blurRadius: 10,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 6, 12),
         child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(10),
+              width: 42,
+              height: 42,
               decoration: BoxDecoration(
-                color: (activeMode == PtvMode.metroTram
-                        ? AppColors.melbourneTram
-                        : AppColors.primaryCyan)
-                    .withAlpha(25),
-                borderRadius: BorderRadius.circular(14),
+                color: accent.withAlpha(30),
+                borderRadius: BorderRadius.circular(13),
               ),
               child: Icon(
                 activeMode == PtvMode.metroTram
                     ? Icons.tram_rounded
                     : Icons.location_on_rounded,
-                color: activeMode == PtvMode.metroTram
-                    ? AppColors.melbourneTram
-                    : AppColors.primaryCyan,
+                color: accent,
                 size: 22,
               ),
             ),
-            const SizedBox(width: 14),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'FROM',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.9,
-                      color: theme.textTheme.bodySmall?.color?.withAlpha(160),
-                    ),
-                  ),
-                  const SizedBox(height: 3),
                   Row(
                     children: [
-                      Flexible(
-                        child: Text(
-                          matchingStation.name,
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 16,
-                          ),
-                          overflow: TextOverflow.ellipsis,
+                      Text(
+                        'FROM',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.9,
+                          color: scheme.onSurfaceVariant,
                         ),
                       ),
                       if (matchingStation.isCityLoop) ...[
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 6),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
+                            horizontal: 6,
+                            vertical: 1,
                           ),
                           decoration: BoxDecoration(
                             color: AppColors.melbourneMetro.withAlpha(40),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: AppColors.melbourneMetro.withAlpha(80),
-                              width: 1,
-                            ),
+                            borderRadius: BorderRadius.circular(6),
                           ),
                           child: const Text(
                             'Loop',
@@ -222,6 +192,16 @@ class StationSelectorCard extends StatelessWidget {
                         ),
                       ],
                     ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    matchingStation.name,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 17,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
@@ -246,7 +226,7 @@ class StationSelectorCard extends StatelessWidget {
               IconButton(
                 icon: Icon(
                   isFav ? Icons.star_rounded : Icons.star_outline_rounded,
-                  color: isFav ? AppColors.statusAmber : Colors.grey.withAlpha(120),
+                  color: isFav ? AppColors.statusAmber : scheme.onSurfaceVariant,
                   size: 24,
                 ),
                 onPressed: () => onToggleFavorite!(matchingStation),
@@ -254,16 +234,13 @@ class StationSelectorCard extends StatelessWidget {
               ),
             ],
             Icon(
-              activeMode == PtvMode.metroTram
-                  ? Icons.tram_rounded
-                  : Icons.search_rounded,
-              color: activeMode == PtvMode.metroTram
-                  ? AppColors.melbourneTram.withAlpha(180)
-                  : Colors.grey,
+              Icons.unfold_more_rounded,
+              color: scheme.onSurfaceVariant,
               size: 20,
             ),
           ],
         ),
+      ),
       ),
     );
   }
