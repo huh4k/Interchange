@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:transit_app/src/domain/entities/trips.dart';
-import 'package:transit_app/src/domain/value_objects/ptv_mode.dart';
-import 'package:transit_app/src/domain/value_objects/service_status.dart';
-import 'package:transit_app/src/domain/value_objects/transit_type.dart';
-import 'package:transit_app/src/presentation/widgets/app_header_widget.dart';
-import 'package:transit_app/src/presentation/widgets/empty_state_widget.dart';
-import 'package:transit_app/src/presentation/widgets/trip_card_skeleton.dart';
-import 'package:transit_app/src/presentation/widgets/trip_card_widget.dart';
+import 'package:interchange/src/domain/entities/trips.dart';
+import 'package:interchange/src/domain/value_objects/ptv_mode.dart';
+import 'package:interchange/src/domain/value_objects/service_status.dart';
+import 'package:interchange/src/domain/value_objects/transit_type.dart';
+import 'package:interchange/src/presentation/widgets/app_header_widget.dart';
+import 'package:interchange/src/presentation/widgets/empty_state_widget.dart';
+import 'package:interchange/src/presentation/widgets/trip_card_skeleton.dart';
+import 'package:interchange/src/presentation/widgets/trip_card_widget.dart';
 
 Widget _wrap(Widget child, {double textScale = 1}) => MaterialApp(
   home: MediaQuery(

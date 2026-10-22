@@ -26,201 +26,149 @@ class AppHeaderWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final statusColor = isLoading ? AppColors.statusAmber : AppColors.statusGreen;
 
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Flexible(
-          child: Row(
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [AppColors.primaryCyan, AppColors.secondaryIndigo],
+            ),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Icon(
+            activeMode == PtvMode.metroTram
+                ? Icons.tram_rounded
+                : Icons.train_rounded,
+            color: Colors.white,
+            size: 24,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.all(13),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [AppColors.primaryCyan, AppColors.secondaryIndigo],
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  Flexible(
+                    child: Text(
+                      'Interchange',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleLarge?.copyWith(fontSize: 21),
+                    ),
                   ),
-                  borderRadius: BorderRadius.circular(18),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.primaryCyan.withAlpha(100),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
+                  const SizedBox(width: 6),
+                  Text(
+                    'v$appVersion',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: scheme.onSurfaceVariant,
                     ),
-                  ],
-                ),
-                child: Icon(
-                  activeMode == PtvMode.metroTram
-                      ? Icons.tram_rounded
-                      : Icons.train_rounded,
-                  color: Colors.white,
-                  size: 28,
-                ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 14),
-              Flexible(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.baseline,
-                      textBaseline: TextBaseline.alphabetic,
-                      children: [
-                        Flexible(
-                          child: Text(
-                            'Interchange',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 0.5,
-                              fontSize: 20,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          'v$appVersion',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: theme.textTheme.bodySmall?.color
-                                ?.withAlpha(150),
-                          ),
-                        ),
-                      ],
+              const SizedBox(height: 2),
+              Row(
+                children: [
+                  Container(
+                    width: 7,
+                    height: 7,
+                    decoration: BoxDecoration(
+                      color: statusColor,
+                      shape: BoxShape.circle,
                     ),
-                    Row(
-                      children: [
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: isLoading
-                                ? AppColors.statusAmber
-                                : AppColors.statusGreen,
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: isLoading
-                                    ? AppColors.statusAmber.withAlpha(100)
-                                    : AppColors.statusGreen.withAlpha(100),
-                                blurRadius: 4,
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Flexible(
-                          child: Text(
-                            isLoading
-                                ? 'Syncing… $loadingPercentage%'
-                                : 'Real-Time Feed',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: isLoading
-                                  ? AppColors.primaryCyan
-                                  : AppColors.statusGreen,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 0.3,
-                            ),
-                          ),
-                        ),
-                      ],
+                  ),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      isLoading ? 'Syncing… $loadingPercentage%' : 'Live',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: isLoading ? statusColor : scheme.onSurfaceVariant,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ],
           ),
         ),
         const SizedBox(width: 8),
-        Row(
-          children: [
-            if (onToggleTheme != null)
-              Container(
-                margin: const EdgeInsets.only(right: 8),
-                decoration: BoxDecoration(
-                  color: theme.brightness == Brightness.dark
-                      ? const Color(0xFF1F2B47)
-                      : const Color(0xFFEDF2F9),
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: theme.brightness == Brightness.dark
-                        ? const Color(0xFF2A3A56)
-                        : const Color(0xFFD0DDE8),
-                    width: 1.2,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withAlpha(5),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: IconButton(
-                  onPressed: onToggleTheme,
-                  icon: Icon(
-                    theme.brightness == Brightness.dark
-                        ? Icons.light_mode_rounded
-                        : Icons.dark_mode_rounded,
-                    size: 20,
-                    color: theme.brightness == Brightness.dark
-                        ? AppColors.statusAmber
-                        : AppColors.secondaryIndigo,
-                  ),
-                  tooltip: theme.brightness == Brightness.dark
-                      ? 'Switch to Light Mode'
-                      : 'Switch to Dark Mode',
-                ),
-              ),
-            Container(
-              decoration: BoxDecoration(
-                color: theme.brightness == Brightness.dark
-                    ? const Color(0xFF1F2B47)
-                    : const Color(0xFFEDF2F9),
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: theme.brightness == Brightness.dark
-                      ? const Color(0xFF2A3A56)
-                      : const Color(0xFFD0DDE8),
-                  width: 1.2,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withAlpha(5),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: IconButton(
-                onPressed: isLoading ? null : onRefresh,
-                icon: isLoading
-                    ? const RepaintBoundary(
-                        child: SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              AppColors.primaryCyan,
-                            ),
-                          ),
-                        ),
-                      )
-                    : const Icon(Icons.refresh_rounded, size: 22),
-                tooltip: 'Refresh Feed',
-              ),
+        if (onToggleTheme != null) ...[
+          _HeaderButton(
+            onPressed: onToggleTheme,
+            tooltip: isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode',
+            child: Icon(
+              isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+              size: 20,
             ),
-          ],
+          ),
+          const SizedBox(width: 8),
+        ],
+        _HeaderButton(
+          onPressed: isLoading ? null : onRefresh,
+          tooltip: 'Refresh Feed',
+          child: isLoading
+              ? const RepaintBoundary(
+                  child: SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.2,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        AppColors.primaryCyan,
+                      ),
+                    ),
+                  ),
+                )
+              : const Icon(Icons.refresh_rounded, size: 21),
         ),
       ],
+    );
+  }
+}
+
+/// Round tonal button used for the header actions.
+class _HeaderButton extends StatelessWidget {
+  final VoidCallback? onPressed;
+  final String tooltip;
+  final Widget child;
+
+  const _HeaderButton({
+    required this.onPressed,
+    required this.tooltip,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return IconButton(
+      onPressed: onPressed,
+      tooltip: tooltip,
+      icon: child,
+      style: IconButton.styleFrom(
+        backgroundColor: scheme.surfaceContainerHigh,
+        disabledBackgroundColor: scheme.surfaceContainerHigh,
+        foregroundColor: scheme.onSurface,
+        fixedSize: const Size(42, 42),
+        side: BorderSide(color: scheme.outlineVariant),
+      ),
     );
   }
 }

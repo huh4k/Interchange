@@ -2,15 +2,15 @@ import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gtfs_bindings/schedule.dart' as gtfs;
-import 'package:transit_app/src/data/repositories/gtfs_repository.dart';
-import 'package:transit_app/src/domain/entities/service.dart';
-import 'package:transit_app/src/domain/entities/station.dart';
-import 'package:transit_app/src/domain/entities/transit_route.dart';
-import 'package:transit_app/src/domain/entities/trips.dart';
-import 'package:transit_app/src/domain/value_objects/transfer_feasibility.dart';
-import 'package:transit_app/src/services/connection_advisor_service.dart';
-import 'package:transit_app/src/services/connection_service.dart';
-import 'package:transit_app/src/services/ptv_rt_service.dart';
+import 'package:interchange/src/data/repositories/gtfs_repository.dart';
+import 'package:interchange/src/domain/entities/service.dart';
+import 'package:interchange/src/domain/entities/station.dart';
+import 'package:interchange/src/domain/entities/transit_route.dart';
+import 'package:interchange/src/domain/entities/trips.dart';
+import 'package:interchange/src/domain/value_objects/transfer_feasibility.dart';
+import 'package:interchange/src/services/connection_advisor_service.dart';
+import 'package:interchange/src/services/connection_service.dart';
+import 'package:interchange/src/services/ptv_rt_service.dart';
 
 class _MockPtvServiceForAdvisor extends PtvRealtimeService {
   final DateTime now;

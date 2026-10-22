@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:transit_app/src/core/heavy_work.dart';
-import 'package:transit_app/src/domain/entities/station.dart';
+import 'package:interchange/src/core/heavy_work.dart';
+import 'package:interchange/src/domain/entities/station.dart';
 
 void main() {
   test('runHeavy runs small payloads inline', () async {

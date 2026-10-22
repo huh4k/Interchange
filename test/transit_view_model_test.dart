@@ -3,19 +3,19 @@ import 'dart:convert';
 import 'package:flutter/widgets.dart' show AppLifecycleState;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gtfs_bindings/schedule.dart' as gtfs;
-import 'package:transit_app/src/data/repositories/gtfs_repository.dart';
-import 'package:transit_app/src/domain/entities/live_connection.dart';
-import 'package:transit_app/src/domain/entities/service.dart';
-import 'package:transit_app/src/domain/entities/station.dart';
-import 'package:transit_app/src/domain/entities/trips.dart';
-import 'package:transit_app/src/domain/entities/transit_route.dart';
-import 'package:transit_app/src/presentation/state/transit_view_model.dart';
+import 'package:interchange/src/data/repositories/gtfs_repository.dart';
+import 'package:interchange/src/domain/entities/live_connection.dart';
+import 'package:interchange/src/domain/entities/service.dart';
+import 'package:interchange/src/domain/entities/station.dart';
+import 'package:interchange/src/domain/entities/trips.dart';
+import 'package:interchange/src/domain/entities/transit_route.dart';
+import 'package:interchange/src/presentation/state/transit_view_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:geolocator/geolocator.dart' show Position;
-import 'package:transit_app/src/services/connection_advisor_service.dart';
-import 'package:transit_app/src/services/location_service.dart';
-import 'package:transit_app/src/services/melbourne_gtfs_service.dart' show MelbourneGtfsService;
-import 'package:transit_app/src/services/ptv_rt_service.dart';
+import 'package:interchange/src/services/connection_advisor_service.dart';
+import 'package:interchange/src/services/location_service.dart';
+import 'package:interchange/src/services/melbourne_gtfs_service.dart' show MelbourneGtfsService;
+import 'package:interchange/src/services/ptv_rt_service.dart';
 
 class _MockRepository implements IGtfsRepository {
   @override

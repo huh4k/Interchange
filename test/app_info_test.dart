@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:transit_app/src/core/app_info.dart';
-import 'package:transit_app/src/presentation/widgets/app_header_widget.dart';
+import 'package:interchange/src/core/app_info.dart';
+import 'package:interchange/src/presentation/widgets/app_header_widget.dart';
 
 void main() {
   test('appVersion matches pubspec.yaml', () {

@@ -4,9 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:http/testing.dart';
-import 'package:transit_app/src/core/http_client_factory.dart';
-import 'package:transit_app/src/domain/entities/station.dart';
-import 'package:transit_app/src/services/ptv_rt_service.dart';
+import 'package:interchange/src/core/http_client_factory.dart';
+import 'package:interchange/src/domain/entities/station.dart';
+import 'package:interchange/src/services/ptv_rt_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

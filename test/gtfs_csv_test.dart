@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:transit_app/src/core/gtfs_csv.dart';
+import 'package:interchange/src/core/gtfs_csv.dart';
 
 /// The pre-optimisation parser, kept verbatim as the oracle.
 List<String> _oldParse(String line) {

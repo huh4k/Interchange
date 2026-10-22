@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../domain/entities/station.dart';
 import '../../domain/entities/transit_route.dart';
 import '../../theme/app_theme.dart';
+import '../widgets/common/ui_kit.dart';
 
 class DisruptionsScreen extends StatefulWidget {
   final List<ServiceAlert> alerts;
@@ -41,6 +42,7 @@ class _DisruptionsScreenState extends State<DisruptionsScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final hasFavorites = widget.favoriteStations.isNotEmpty;
     final allList = widget.allAlerts.isNotEmpty ? widget.allAlerts : widget.alerts;
     final displayedAlerts = _showAllLines ? allList : widget.alerts;
@@ -57,13 +59,16 @@ class _DisruptionsScreenState extends State<DisruptionsScreen> {
             }
             return a.severity == _selectedSeverity;
           }).toList();
+    final mutedBody = TextStyle(
+      fontSize: 13,
+      height: 1.4,
+      color: scheme.onSurfaceVariant,
+    );
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Station Disruptions',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
+        titleSpacing: 20,
+        title: Text('Station Disruptions', style: theme.textTheme.titleLarge),
         actions: [
           TextButton.icon(
             style: TextButton.styleFrom(
@@ -76,7 +81,7 @@ class _DisruptionsScreenState extends State<DisruptionsScreen> {
             ),
             label: Text(
               _showAllLines ? 'My Stations' : 'All Lines',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
             ),
             onPressed: () {
               setState(() {
@@ -97,6 +102,7 @@ class _DisruptionsScreenState extends State<DisruptionsScreen> {
             onPressed: widget.isLoading ? null : widget.onRefresh,
             tooltip: 'Refresh Alerts',
           ),
+          const SizedBox(width: 8),
         ],
       ),
       body: RefreshIndicator(
@@ -104,108 +110,33 @@ class _DisruptionsScreenState extends State<DisruptionsScreen> {
         color: AppColors.primaryCyan,
         child: CustomScrollView(
           slivers: [
-            // Segmented Toggle Button Bar
+            // My Stations / All Lines toggle, styled like the mode slider
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 10, 20, 6),
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 10),
                 child: Container(
+                  height: 46,
                   padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(
-                    color: theme.cardColor,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: theme.dividerColor.withAlpha(35),
-                    ),
+                    color: scheme.surfaceContainerHigh,
+                    borderRadius: BorderRadius.circular(100),
+                    border: Border.all(color: scheme.outlineVariant),
                   ),
                   child: Row(
                     children: [
-                      Expanded(
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(10),
-                          onTap: () {
-                            if (_showAllLines) {
-                              setState(() => _showAllLines = false);
-                            }
-                          },
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 180),
-                            padding: const EdgeInsets.symmetric(vertical: 9),
-                            decoration: BoxDecoration(
-                              color: !_showAllLines
-                                  ? AppColors.primaryCyan
-                                  : Colors.transparent,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.star_rounded,
-                                  size: 16,
-                                  color: !_showAllLines
-                                      ? Colors.white
-                                      : AppColors.statusAmber,
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  'My Stations (${widget.alerts.length})',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 12,
-                                    color: !_showAllLines
-                                        ? Colors.white
-                                        : theme.textTheme.bodyMedium?.color,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
+                      _segment(
+                        selected: !_showAllLines,
+                        icon: Icons.star_rounded,
+                        iconColor: AppColors.statusAmber,
+                        label: 'My Stations (${widget.alerts.length})',
+                        onTap: () => setState(() => _showAllLines = false),
                       ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(10),
-                          onTap: () {
-                            if (!_showAllLines) {
-                              setState(() => _showAllLines = true);
-                            }
-                          },
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 180),
-                            padding: const EdgeInsets.symmetric(vertical: 9),
-                            decoration: BoxDecoration(
-                              color: _showAllLines
-                                  ? AppColors.primaryCyan
-                                  : Colors.transparent,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.alt_route_rounded,
-                                  size: 16,
-                                  color: _showAllLines
-                                      ? Colors.white
-                                      : theme.textTheme.bodyMedium?.color
-                                          ?.withAlpha(160),
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  'All Lines (${allList.length})',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 12,
-                                    color: _showAllLines
-                                        ? Colors.white
-                                        : theme.textTheme.bodyMedium?.color,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
+                      _segment(
+                        selected: _showAllLines,
+                        icon: Icons.alt_route_rounded,
+                        iconColor: AppColors.primaryCyan,
+                        label: 'All Lines (${allList.length})',
+                        onTap: () => setState(() => _showAllLines = true),
                       ),
                     ],
                   ),
@@ -213,88 +144,66 @@ class _DisruptionsScreenState extends State<DisruptionsScreen> {
               ),
             ),
 
-            // Severity / Category Quick Filter Bar
+            // Severity quick filters
             if (displayedAlerts.isNotEmpty)
               SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        _buildSeverityChip(
-                          theme,
-                          label: 'All Alerts',
-                          count: displayedAlerts.length,
-                          isSelected: _selectedSeverity == null,
-                          color: AppColors.primaryCyan,
-                          onTap: () => setState(() => _selectedSeverity = null),
-                        ),
-                        const SizedBox(width: 8),
-                        _buildSeverityChip(
-                          theme,
-                          label: 'Disrupted',
-                          count: displayedAlerts
-                              .where((a) =>
-                                  a.severity == ServiceStatus.disrupted ||
-                                  a.severity == ServiceStatus.cancelled)
-                              .length,
-                          isSelected: _selectedSeverity == ServiceStatus.disrupted,
-                          color: AppColors.statusRose,
-                          onTap: () => setState(() => _selectedSeverity =
-                              _selectedSeverity == ServiceStatus.disrupted
-                                  ? null
-                                  : ServiceStatus.disrupted),
-                        ),
-                        const SizedBox(width: 8),
-                        _buildSeverityChip(
-                          theme,
-                          label: 'Delays',
-                          count: displayedAlerts
-                              .where((a) => a.severity == ServiceStatus.delayed)
-                              .length,
-                          isSelected: _selectedSeverity == ServiceStatus.delayed,
-                          color: AppColors.statusAmber,
-                          onTap: () => setState(() => _selectedSeverity =
-                              _selectedSeverity == ServiceStatus.delayed
-                                  ? null
-                                  : ServiceStatus.delayed),
-                        ),
-                        const SizedBox(width: 8),
-                        _buildSeverityChip(
-                          theme,
-                          label: 'Works / Info',
-                          count: displayedAlerts
-                              .where((a) =>
-                                  a.severity == ServiceStatus.scheduled ||
-                                  a.severity == ServiceStatus.onTime)
-                              .length,
-                          isSelected: _selectedSeverity == ServiceStatus.scheduled,
-                          color: AppColors.secondaryIndigo,
-                          onTap: () => setState(() => _selectedSeverity =
-                              _selectedSeverity == ServiceStatus.scheduled
-                                  ? null
-                                  : ServiceStatus.scheduled),
-                        ),
-                      ],
-                    ),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Row(
+                    children: [
+                      _buildSeverityChip(
+                        label: 'All Alerts',
+                        count: displayedAlerts.length,
+                        isSelected: _selectedSeverity == null,
+                        color: AppColors.primaryCyan,
+                        onTap: () => setState(() => _selectedSeverity = null),
+                      ),
+                      const SizedBox(width: 6),
+                      _buildSeverityChip(
+                        label: 'Disrupted',
+                        count: displayedAlerts
+                            .where((a) =>
+                                a.severity == ServiceStatus.disrupted ||
+                                a.severity == ServiceStatus.cancelled)
+                            .length,
+                        isSelected: _selectedSeverity == ServiceStatus.disrupted,
+                        color: AppColors.statusRose,
+                        onTap: () => _toggleSeverity(ServiceStatus.disrupted),
+                      ),
+                      const SizedBox(width: 6),
+                      _buildSeverityChip(
+                        label: 'Delays',
+                        count: displayedAlerts
+                            .where((a) => a.severity == ServiceStatus.delayed)
+                            .length,
+                        isSelected: _selectedSeverity == ServiceStatus.delayed,
+                        color: AppColors.statusAmber,
+                        onTap: () => _toggleSeverity(ServiceStatus.delayed),
+                      ),
+                      const SizedBox(width: 6),
+                      _buildSeverityChip(
+                        label: 'Works / Info',
+                        count: displayedAlerts
+                            .where((a) =>
+                                a.severity == ServiceStatus.scheduled ||
+                                a.severity == ServiceStatus.onTime)
+                            .length,
+                        isSelected: _selectedSeverity == ServiceStatus.scheduled,
+                        color: AppColors.secondaryIndigo,
+                        onTap: () => _toggleSeverity(ServiceStatus.scheduled),
+                      ),
+                    ],
                   ),
                 ),
               ),
 
-            // Context Header Banner
+            // What this view is monitoring
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                child: Container(
+                padding: const EdgeInsets.fromLTRB(20, 14, 20, 4),
+                child: SurfacePanel(
                   padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: theme.cardColor,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: theme.dividerColor.withAlpha(40),
-                    ),
-                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -304,24 +213,19 @@ class _DisruptionsScreenState extends State<DisruptionsScreen> {
                             _showAllLines
                                 ? Icons.alt_route_rounded
                                 : Icons.star_rounded,
-                            size: 18,
+                            size: 16,
                             color: _showAllLines
                                 ? AppColors.primaryCyan
                                 : AppColors.statusAmber,
                           ),
                           const SizedBox(width: 8),
-                          Text(
-                            _showAllLines
-                                ? 'SHOWING ALL NETWORK DISRUPTIONS'
-                                : (hasFavorites
-                                    ? 'MONITORING FAVORITE STATIONS'
-                                    : 'MONITORING CURRENT STATION'),
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0.8,
-                              color: theme.textTheme.bodySmall?.color
-                                  ?.withAlpha(160),
+                          Expanded(
+                            child: SectionLabel(
+                              _showAllLines
+                                  ? 'SHOWING ALL NETWORK DISRUPTIONS'
+                                  : (hasFavorites
+                                      ? 'MONITORING FAVORITE STATIONS'
+                                      : 'MONITORING CURRENT STATION'),
                             ),
                           ),
                         ],
@@ -330,52 +234,25 @@ class _DisruptionsScreenState extends State<DisruptionsScreen> {
                       if (_showAllLines)
                         Text(
                           'Showing live service alerts across every line on the Melbourne suburban network (${allList.length} active).',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: theme.textTheme.bodyMedium?.color
-                                ?.withAlpha(180),
-                          ),
+                          style: mutedBody,
                         )
                       else if (hasFavorites)
                         Wrap(
                           spacing: 6,
-                          runSpacing: 4,
-                          children: widget.favoriteStations.map((st) {
-                            return Chip(
-                              labelPadding:
-                                  const EdgeInsets.symmetric(horizontal: 4),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 4,
-                                vertical: 0,
-                              ),
-                              avatar: const Icon(
-                                Icons.train_rounded,
-                                size: 14,
+                          runSpacing: 6,
+                          children: [
+                            for (final st in widget.favoriteStations)
+                              TintPill(
+                                label: st.name,
                                 color: AppColors.primaryCyan,
+                                icon: Icons.train_rounded,
                               ),
-                              label: Text(
-                                st.name,
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              backgroundColor:
-                                  AppColors.primaryCyan.withAlpha(20),
-                              side: BorderSide(
-                                color: AppColors.primaryCyan.withAlpha(50),
-                              ),
-                            );
-                          }).toList(),
+                          ],
                         )
                       else
                         Text(
                           'Showing alerts for ${widget.selectedStation.name}. Star stations in search to monitor their disruptions here.',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: theme.textTheme.bodyMedium?.color
-                                ?.withAlpha(180),
-                          ),
+                          style: mutedBody,
                         ),
                     ],
                   ),
@@ -393,14 +270,14 @@ class _DisruptionsScreenState extends State<DisruptionsScreen> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Container(
-                          padding: const EdgeInsets.all(20),
+                          padding: const EdgeInsets.all(18),
                           decoration: BoxDecoration(
                             color: AppColors.statusGreen.withAlpha(25),
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(
-                            Icons.check_circle_rounded,
-                            size: 56,
+                            Icons.check_rounded,
+                            size: 44,
                             color: AppColors.statusGreen,
                           ),
                         ),
@@ -412,7 +289,7 @@ class _DisruptionsScreenState extends State<DisruptionsScreen> {
                                   ? 'No Disruptions Across Network'
                                   : 'No Active Disruptions'),
                           style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w800,
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -425,24 +302,22 @@ class _DisruptionsScreenState extends State<DisruptionsScreen> {
                                       ? 'All lines serving your favorite stations are operating normally.'
                                       : 'No active disruptions reported for ${widget.selectedStation.name}.')),
                           textAlign: TextAlign.center,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: Colors.grey,
-                          ),
+                          style: mutedBody,
                         ),
                         if (_selectedSeverity != null) ...[
                           const SizedBox(height: 16),
                           OutlinedButton(
-                            onPressed: () => setState(() => _selectedSeverity = null),
+                            onPressed: () =>
+                                setState(() => _selectedSeverity = null),
                             child: const Text('Reset Severity Filter'),
                           ),
                         ] else if (!_showAllLines && allList.isNotEmpty) ...[
                           const SizedBox(height: 16),
-                          OutlinedButton.icon(
-                            style: OutlinedButton.styleFrom(
+                          FilledButton.tonalIcon(
+                            style: FilledButton.styleFrom(
+                              backgroundColor:
+                                  AppColors.primaryCyan.withAlpha(30),
                               foregroundColor: AppColors.primaryCyan,
-                              side: const BorderSide(
-                                color: AppColors.primaryCyan,
-                              ),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
@@ -465,94 +340,54 @@ class _DisruptionsScreenState extends State<DisruptionsScreen> {
               )
             else
               SliverPadding(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
                 sliver: SliverList(
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {
                       final alert = filteredAlerts[index];
                       final status = alert.severity;
 
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 14),
-                        padding: const EdgeInsets.all(18),
-                        decoration: BoxDecoration(
-                          color: theme.cardColor,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: status.color.withAlpha(28),
-                            width: 1.2,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withAlpha(18),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
+                      return SurfacePanel(
+                        accent: status.color,
+                        margin: const EdgeInsets.only(bottom: 10),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(
                               children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 5,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.primaryCyan,
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
+                                TintPill(
+                                  label: status.label,
+                                  color: status.color,
+                                ),
+                                const SizedBox(width: 8),
+                                Flexible(
                                   child: Text(
                                     alert.lineCode,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 9,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: status.color.withAlpha(28),
-                                    borderRadius: BorderRadius.circular(9),
-                                  ),
-                                  child: Text(
-                                    status.label,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
-                                      color: status.color,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 11,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: scheme.onSurfaceVariant,
                                     ),
                                   ),
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 12),
+                            const SizedBox(height: 10),
                             Text(
                               alert.title,
                               style: theme.textTheme.titleSmall?.copyWith(
-                                fontWeight: FontWeight.bold,
+                                fontWeight: FontWeight.w700,
                                 fontSize: 15,
+                                height: 1.3,
                               ),
                             ),
-                            if (alert.description.isNotEmpty) ...[
-                              const SizedBox(height: 8),
-                              Text(
-                                alert.description,
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: theme.textTheme.bodyMedium?.color
-                                      ?.withAlpha(200),
-                                  fontSize: 13,
-                                  height: 1.45,
-                                ),
-                              ),
+                            if (alert.description.isNotEmpty &&
+                                alert.description.trim() !=
+                                    alert.title.trim()) ...[
+                              const SizedBox(height: 6),
+                              Text(alert.description, style: mutedBody),
                             ],
                           ],
                         ),
@@ -568,46 +403,87 @@ class _DisruptionsScreenState extends State<DisruptionsScreen> {
     );
   }
 
-  Widget _buildSeverityChip(
-    ThemeData theme, {
+  void _toggleSeverity(ServiceStatus severity) => setState(() {
+        _selectedSeverity = _selectedSeverity == severity ? null : severity;
+      });
+
+  Widget _segment({
+    required bool selected,
+    required IconData icon,
+    required Color iconColor,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    return Expanded(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: selected ? null : onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          decoration: BoxDecoration(
+            color: selected ? AppColors.primaryCyan : Colors.transparent,
+            borderRadius: BorderRadius.circular(100),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 16, color: selected ? Colors.white : iconColor),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                    fontSize: 13,
+                    color: selected ? Colors.white : scheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSeverityChip({
     required String label,
     required int count,
     required bool isSelected,
     required Color color,
     required VoidCallback onTap,
   }) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(10),
+    final scheme = Theme.of(context).colorScheme;
+    return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
         decoration: BoxDecoration(
-          color: isSelected ? color.withAlpha(35) : theme.cardColor,
-          borderRadius: BorderRadius.circular(10),
+          color: isSelected ? color.withAlpha(35) : scheme.surface,
+          borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: isSelected ? color : theme.dividerColor.withAlpha(40),
-            width: isSelected ? 1.5 : 1,
+            color: isSelected ? color : scheme.outlineVariant,
           ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                color: color,
-                shape: BoxShape.circle,
-              ),
+              width: 7,
+              height: 7,
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
             ),
             const SizedBox(width: 6),
             Text(
               '$label ($count)',
               style: TextStyle(
-                fontSize: 11,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                color: isSelected ? color : theme.textTheme.bodyMedium?.color,
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                color: isSelected ? color : scheme.onSurface,
               ),
             ),
           ],

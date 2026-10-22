@@ -2,23 +2,23 @@ import 'package:gtfs_bindings/schedule.dart' as gtfs;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart' show Position;
-import 'package:transit_app/src/domain/entities/service.dart' show ServiceStop;
+import 'package:interchange/src/domain/entities/service.dart' show ServiceStop;
 import 'package:provider/provider.dart';
-import 'package:transit_app/main.dart';
-import 'package:transit_app/src/domain/entities/live_connection.dart';
-import 'package:transit_app/src/presentation/screens/home_screen.dart';
-import 'package:transit_app/src/presentation/state/transit_view_model.dart';
-import 'package:transit_app/src/services/connection_advisor_service.dart';
-import 'package:transit_app/src/services/location_service.dart';
-import 'package:transit_app/src/domain/entities/transit_route.dart';
+import 'package:interchange/main.dart';
+import 'package:interchange/src/domain/entities/live_connection.dart';
+import 'package:interchange/src/presentation/screens/home_screen.dart';
+import 'package:interchange/src/presentation/state/transit_view_model.dart';
+import 'package:interchange/src/services/connection_advisor_service.dart';
+import 'package:interchange/src/services/location_service.dart';
+import 'package:interchange/src/domain/entities/transit_route.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:transit_app/src/services/ptv_rt_service.dart';
-import 'package:transit_app/src/domain/entities/station.dart';
-import 'package:transit_app/src/domain/entities/trips.dart';
-import 'package:transit_app/src/presentation/widgets/station_selector_card.dart';
-import 'package:transit_app/src/services/gtfs_parser.dart';
-import 'package:transit_app/src/presentation/state/theme_view_model.dart';
-import 'package:transit_app/src/services/settings_service.dart';
+import 'package:interchange/src/services/ptv_rt_service.dart';
+import 'package:interchange/src/domain/entities/station.dart';
+import 'package:interchange/src/domain/entities/trips.dart';
+import 'package:interchange/src/presentation/widgets/station_selector_card.dart';
+import 'package:interchange/src/services/gtfs_parser.dart';
+import 'package:interchange/src/presentation/state/theme_view_model.dart';
+import 'package:interchange/src/services/settings_service.dart';
 
 class _EmptyGtfsRepository implements IGtfsRepository {
   @override

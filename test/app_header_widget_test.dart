@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:transit_app/src/domain/value_objects/ptv_mode.dart';
-import 'package:transit_app/src/presentation/widgets/app_header_widget.dart';
+import 'package:interchange/src/domain/value_objects/ptv_mode.dart';
+import 'package:interchange/src/presentation/widgets/app_header_widget.dart';
 
 void main() {
   testWidgets('AppHeaderWidget displays train icon when activeMode is metroTrain', (tester) async {
