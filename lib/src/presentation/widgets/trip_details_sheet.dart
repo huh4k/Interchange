@@ -245,7 +245,7 @@ class _TripDetailsSheetState extends State<TripDetailsSheet> {
     final badgeColor = departure == null
         ? AppColors.melbourneBus
         : departure.lineColor;
-    final lineCode = departure?.lineCode ?? widget.trip.shortName ?? widget.trip.routeId;
+    final lineCode = departure?.displayCode ?? widget.trip.shortName ?? widget.trip.routeId;
     final scheduledTime = departure?.scheduledTime;
     final timeStr = scheduledTime != null
         ? '${scheduledTime.hour.toString().padLeft(2, '0')}:${scheduledTime.minute.toString().padLeft(2, '0')}'

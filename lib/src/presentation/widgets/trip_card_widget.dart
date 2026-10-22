@@ -33,7 +33,8 @@ class TripCardWidget extends StatelessWidget {
     final theme = Theme.of(context);
     final departure = trip.departure;
 
-    final lineCode = departure?.lineCode ?? trip.shortName ?? trip.routeId;
+    final lineCode =
+        departure?.displayCode ?? trip.shortName ?? trip.routeId;
     final badgeColor = departure == null
         ? AppColors.melbourneBus
         : departure.lineColor;

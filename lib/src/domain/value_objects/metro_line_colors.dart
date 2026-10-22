@@ -35,6 +35,17 @@ Color? metroLineColor({String name = '', String code = ''}) {
   return null;
 }
 
+/// The 3-letter code of a known metro train line (e.g. FKN), or null.
+String? metroLineCode({String name = '', String code = ''}) {
+  final c = code.trim().toUpperCase();
+  final n = name.trim().toLowerCase();
+  for (final e in _metroLines.entries) {
+    if (c.isNotEmpty && e.value.code == c) return e.value.code;
+    if (n.isNotEmpty && n.contains(e.key)) return e.value.code;
+  }
+  return null;
+}
+
 /// Colour for a line pill: the metro line colour for trains, otherwise the
 /// mode's brand colour.
 Color lineColorFor(TransitType type, {String name = '', String code = ''}) =>

@@ -83,7 +83,7 @@ class _LiveRideSheetState extends State<LiveRideSheet> {
 
     final isTramTrip = trip.departure?.type.value == 1;
     final lineCode = trip.departure?.lineCode.isNotEmpty == true
-        ? trip.departure!.lineCode
+        ? trip.departure!.displayCode
         : (isTramTrip
             ? 'TRAM'
             : trip.departure?.type == TransitType.regionalTrain

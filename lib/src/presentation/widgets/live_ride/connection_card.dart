@@ -20,7 +20,7 @@ class ConnectionCard extends StatelessWidget {
     final feasibility = conn.feasibility;
     final departure = conn.connectingTrip.departure;
     final lineCode = departure?.lineCode.isNotEmpty == true
-        ? departure!.lineCode
+        ? departure!.displayCode
         : conn.connectingTrip.headsign;
     final lineColor = departure?.lineColor ?? Theme.of(context).colorScheme.primary;
     final bufferMins = conn.bufferMinutes;

@@ -26,6 +26,14 @@ class TripDeparture {
   /// Colour for this service's line pill (metro line colour, else mode colour).
   Color get lineColor => lineColorFor(type, name: routeName, code: lineCode);
 
+  /// Code for the line badge: the 3-letter code for known metro lines,
+  /// otherwise the raw [lineCode].
+  String get displayCode =>
+      (type == TransitType.metro
+          ? metroLineCode(name: routeName, code: lineCode)
+          : null) ??
+      lineCode;
+
   int minutesUntil(DateTime now) => scheduledTime.difference(now).inMinutes;
 
   TripDeparture copyWith({
