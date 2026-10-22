@@ -32,8 +32,11 @@ class AppHeaderWidget extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
     final brand = activeMode.transitType.ptvBrandColor;
     final hsl = HSLColor.fromColor(brand);
+    final brandLight = hsl
+        .withLightness((hsl.lightness + 0.08).clamp(0.0, 1.0))
+        .toColor();
     final brandDark = hsl
-        .withLightness((hsl.lightness - 0.15).clamp(0.0, 1.0))
+        .withLightness((hsl.lightness - 0.10).clamp(0.0, 1.0))
         .toColor();
     final statusColor = isLoading
         ? AppColors.statusAmber
@@ -55,7 +58,7 @@ class AppHeaderWidget extends StatelessWidget {
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [brand, brandDark],
+              colors: [brandLight, brandDark],
             ),
             borderRadius: BorderRadius.circular(14),
           ),
