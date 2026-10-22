@@ -90,7 +90,7 @@ class _LiveRideSheetState extends State<LiveRideSheet> {
                 ? 'V/LINE'
                 : 'METRO');
     final lineColor =
-        trip.departure?.type.ptvBrandColor ?? AppColors.melbourneMetro;
+        trip.departure?.lineColor ?? AppColors.melbourneMetro;
     final destination = trip.destinationName;
 
     // Filter trip stops to only show the boarding station and following stations

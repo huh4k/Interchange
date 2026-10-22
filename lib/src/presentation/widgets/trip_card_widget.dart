@@ -36,7 +36,7 @@ class TripCardWidget extends StatelessWidget {
     final lineCode = departure?.lineCode ?? trip.shortName ?? trip.routeId;
     final badgeColor = departure == null
         ? AppColors.melbourneBus
-        : departure.type.ptvBrandColor;
+        : departure.lineColor;
     final status = departure?.status ?? ServiceStatus.scheduled;
     final minutesAway = departure?.minutesUntil(DateTime.now()) ?? 0;
     final platform = departure?.platform ?? '';

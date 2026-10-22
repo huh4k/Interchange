@@ -244,7 +244,7 @@ class _TripDetailsSheetState extends State<TripDetailsSheet> {
     final departure = widget.trip.departure;
     final badgeColor = departure == null
         ? AppColors.melbourneBus
-        : departure.type.ptvBrandColor;
+        : departure.lineColor;
     final lineCode = departure?.lineCode ?? widget.trip.shortName ?? widget.trip.routeId;
     final scheduledTime = departure?.scheduledTime;
     final timeStr = scheduledTime != null

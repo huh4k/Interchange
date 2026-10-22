@@ -1,4 +1,6 @@
 import 'service.dart';
+import 'dart:ui' show Color;
+import '../value_objects/metro_line_colors.dart';
 import '../value_objects/transit_type.dart';
 import '../value_objects/service_status.dart';
 
@@ -20,6 +22,9 @@ class TripDeparture {
     required this.type,
     this.status = ServiceStatus.scheduled,
   });
+
+  /// Colour for this service's line pill (metro line colour, else mode colour).
+  Color get lineColor => lineColorFor(type, name: routeName, code: lineCode);
 
   int minutesUntil(DateTime now) => scheduledTime.difference(now).inMinutes;
 
