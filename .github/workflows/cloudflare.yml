@@ -1,9 +1,6 @@
 name: Deploy Flutter Web to Cloudflare Pages
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 # Cancel in-progress runs for the same branch to save build minutes and prevent race conditions
