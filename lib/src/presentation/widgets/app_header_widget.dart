@@ -9,6 +9,7 @@ class AppHeaderWidget extends StatelessWidget {
   final int loadingPercentage;
   final String loadingStatus;
   final PtvMode activeMode;
+  final bool isOffline;
   final VoidCallback onRefresh;
   final VoidCallback? onToggleTheme;
 
@@ -19,6 +20,7 @@ class AppHeaderWidget extends StatelessWidget {
     this.loadingPercentage = 0,
     this.loadingStatus = '',
     this.activeMode = PtvMode.metroTrain,
+    this.isOffline = false,
     required this.onRefresh,
     this.onToggleTheme,
   });
@@ -28,7 +30,21 @@ class AppHeaderWidget extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
-    final statusColor = isLoading ? AppColors.statusAmber : AppColors.statusGreen;
+    final brand = activeMode.transitType.ptvBrandColor;
+    final hsl = HSLColor.fromColor(brand);
+    final brandDark = hsl
+        .withLightness((hsl.lightness - 0.15).clamp(0.0, 1.0))
+        .toColor();
+    final statusColor = isLoading
+        ? AppColors.statusAmber
+        : isOffline
+            ? scheme.error
+            : AppColors.statusGreen;
+    final statusLabel = isLoading
+        ? 'Syncing… $loadingPercentage%'
+        : isOffline
+            ? 'Offline'
+            : 'Live';
 
     return Row(
       children: [
@@ -36,17 +52,15 @@ class AppHeaderWidget extends StatelessWidget {
           width: 44,
           height: 44,
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
+            gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [AppColors.primaryCyan, AppColors.secondaryIndigo],
+              colors: [brand, brandDark],
             ),
             borderRadius: BorderRadius.circular(14),
           ),
           child: Icon(
-            activeMode == PtvMode.metroTram
-                ? Icons.tram_rounded
-                : Icons.train_rounded,
+            activeMode.transitType.icon,
             color: Colors.white,
             size: 24,
           ),
@@ -93,11 +107,13 @@ class AppHeaderWidget extends StatelessWidget {
                   const SizedBox(width: 6),
                   Flexible(
                     child: Text(
-                      isLoading ? 'Syncing… $loadingPercentage%' : 'Live',
+                      statusLabel,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: isLoading ? statusColor : scheme.onSurfaceVariant,
+                        color: isLoading || isOffline
+                            ? statusColor
+                            : scheme.onSurfaceVariant,
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                       ),

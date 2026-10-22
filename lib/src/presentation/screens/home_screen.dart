@@ -543,14 +543,15 @@ class _HeaderSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final (isLoading, progress, percentage, status, mode) = context
-        .select<TransitViewModel, (bool, double, int, String, PtvMode)>(
+    final (isLoading, progress, percentage, status, mode, isOffline) = context
+        .select<TransitViewModel, (bool, double, int, String, PtvMode, bool)>(
           (vm) => (
             vm.isLoading,
             vm.loadingProgress,
             vm.loadingPercentage,
             vm.loadingStatus,
             vm.activeMode,
+            vm.isOffline,
           ),
         );
     final viewModel = context.read<TransitViewModel>();
@@ -564,6 +565,7 @@ class _HeaderSection extends StatelessWidget {
           loadingPercentage: percentage,
           loadingStatus: status,
           activeMode: mode,
+          isOffline: isOffline,
           onRefresh: viewModel.loadData,
           onToggleTheme: () {
             try {

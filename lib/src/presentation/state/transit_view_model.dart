@@ -73,6 +73,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
   String? _errorMessage;
   int _loadRequestId = 0;
   bool _isSilentRefreshing = false;
+  bool _isOffline = false;
 
   /// Data younger than this is not refetched when the app resumes.
   static const Duration _resumeRefreshThreshold = Duration(seconds: 15);
@@ -310,6 +311,9 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
   Position? get userPosition => _userPosition;
   bool get isLocating => _isLocating;
   bool get isLoading => _isLoading;
+
+  /// True when the last live departures request failed (no connection).
+  bool get isOffline => _isOffline;
   double get loadingProgress => _loadingProgress;
   String get loadingStatus => _loadingStatus;
   int get loadingPercentage => (_loadingProgress * 100).clamp(0, 100).toInt();
@@ -911,15 +915,19 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
       }
       final requestedStation = station ?? _selectedStation;
 
+      var liveFeedFailed = false;
       Future<List<Trip>> loadLiveTrips(Station s) async {
         try {
-          return await ptvService.fetchDepartures(
+          final trips = await ptvService.fetchDepartures(
             s.stopId,
             station: s,
             routeType: routeType,
             maxResults: 20,
           );
+          liveFeedFailed = false;
+          return trips;
         } catch (_) {
+          liveFeedFailed = true;
           return <Trip>[];
         }
       }
@@ -1034,6 +1042,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
           _loadingProgress = 1.0;
           _loadingStatus = 'Complete';
         }
+        _isOffline = liveFeedFailed;
         _lastRefreshAt = _clock();
         // Count the next auto-refresh from this load, not from app start.
         if (_autoRefreshTimer != null) _startAutoRefresh();
@@ -1051,6 +1060,10 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
       }
     } catch (e) {
       if (requestId == _loadRequestId && !_isDisposed) {
+        if (!_isOffline) {
+          _isOffline = true;
+          if (isSilent) notifyListeners();
+        }
         if (!isSilent) {
           _errorMessage = e is GtfsNetworkException
               ? e.message
