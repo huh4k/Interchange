@@ -182,59 +182,97 @@ class _Header extends StatelessWidget {
         .withLightness((hsl.lightness - 0.10).clamp(0.0, 1.0))
         .toColor();
 
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Tooltip(
-          message: 'Back',
-          child: Material(
-            color: scheme.surfaceContainerHigh,
-            shape: const CircleBorder(),
-            child: InkWell(
-              customBorder: const CircleBorder(),
-              onTap: () => Navigator.of(context).maybePop(),
-              child: const SizedBox(
-                width: 44,
-                height: 44,
-                child: Icon(Icons.arrow_back_rounded, size: 21),
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Settings',
-                style: theme.textTheme.titleLarge?.copyWith(fontSize: 24),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                'Only show what you use',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: scheme.onSurfaceVariant,
+        Row(
+          children: [
+            _BackPill(onTap: () => Navigator.of(context).maybePop()),
+            const Spacer(),
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [light, dark],
                 ),
+                borderRadius: BorderRadius.circular(14),
               ),
-            ],
+              child: const Icon(
+                Icons.tune_rounded,
+                color: Colors.white,
+                size: 22,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 18),
+        Text(
+          'Settings',
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontSize: 32,
+            fontWeight: FontWeight.w800,
+            height: 1.1,
           ),
         ),
-        Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [light, dark],
-            ),
-            borderRadius: BorderRadius.circular(14),
+        const SizedBox(height: 4),
+        Text(
+          'Only show what you use',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: scheme.onSurfaceVariant,
           ),
-          child: const Icon(Icons.tune_rounded, color: Colors.white, size: 22),
         ),
       ],
+    );
+  }
+}
+
+/// "‹ Home" pill in the accent colour. A label says where it goes, which a
+/// bare arrow doesn't, and the tint ties it to the rest of the screen.
+class _BackPill extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _BackPill({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = Theme.of(context).colorScheme.primary;
+
+    return Semantics(
+      button: true,
+      label: 'Back to home',
+      child: ExcludeSemantics(
+        child: Material(
+          color: accent.withAlpha(28),
+          shape: StadiumBorder(side: BorderSide(color: accent.withAlpha(80))),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(10, 10, 16, 10),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.chevron_left_rounded, size: 22, color: accent),
+                  const SizedBox(width: 2),
+                  Text(
+                    'Home',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: accent,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
