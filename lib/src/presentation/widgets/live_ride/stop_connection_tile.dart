@@ -12,6 +12,9 @@ import 'connection_card.dart';
 class StopConnectionTile extends StatelessWidget {
   final Station station;
   final String platform;
+
+  /// 'Plat' for rail, 'Bay' for buses.
+  final String platformLabel;
   final DateTime? departureTime;
   final List<LiveConnection> connections;
   final bool isCurrentStop;
@@ -30,6 +33,7 @@ class StopConnectionTile extends StatelessWidget {
     super.key,
     required this.station,
     required this.platform,
+    this.platformLabel = 'Plat',
     required this.departureTime,
     required this.connections,
     required this.isCurrentStop,
@@ -111,7 +115,7 @@ class StopConnectionTile extends StatelessWidget {
         ),
         if (platform.isNotEmpty)
           Text(
-            'Plat $platform',
+            '$platformLabel $platform',
             style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
           ),
       ],

@@ -11,6 +11,10 @@ enum PtvMode {
   final String id;
   const PtvMode(this.id);
 
+  /// Modes with no static GTFS hosted: stops and departures come from the
+  /// PTV API only.
+  bool get isLiveOnly => this == PtvMode.metroBus;
+
   /// Name of this mode's static GTFS files on the data host (see `gtfs_config.dart`).
   String get gtfsKey {
     switch (this) {

@@ -41,6 +41,7 @@ class TripCardWidget extends StatelessWidget {
     final status = departure?.status ?? ServiceStatus.scheduled;
     final minutesAway = departure?.minutesUntil(DateTime.now()) ?? 0;
     final platform = departure?.platform ?? '';
+    final platformLabelWord = departure?.type.platformLabel ?? 'Plat';
     final scheduledTime = departure?.scheduledTime;
     final routeName = departure?.routeName ?? '';
     final destinationText = trip.destinationName;
@@ -79,7 +80,7 @@ class TripCardWidget extends StatelessWidget {
       if (timeString.isNotEmpty) 'departs $timeString',
       if (scheduledTime != null)
         minutesAway <= 0 ? 'now' : 'in $minutesAway minutes',
-      if (platform.isNotEmpty) 'platform $platform',
+      if (platform.isNotEmpty) '${departure?.type == TransitType.bus ? 'bay' : 'platform'} $platform',
       if (showStatus) status.label,
       if (leaveByText.isNotEmpty) leaveByText.toLowerCase(),
       if (hasDisruption) 'service alert',
@@ -206,7 +207,7 @@ class TripCardWidget extends StatelessWidget {
                               ),
                             if (platform.isNotEmpty)
                               Text(
-                                'Plat $platform',
+                                '$platformLabelWord $platform',
                                 style: TextStyle(
                                   fontSize: 13,
                                   color: mutedColor,

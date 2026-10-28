@@ -81,6 +81,11 @@ class _TripDetailsSheetState extends State<TripDetailsSheet> {
 
   bool get _isVline => widget.trip.departure?.type == TransitType.regionalTrain;
 
+  String get _platLabel =>
+      widget.trip.departure?.type.platformLabel ?? 'Plat';
+
+  bool get _isBus => widget.trip.departure?.type == TransitType.bus;
+
   /// V/Line platforms aren't in PTV's data, so none is ever shown for them.
   String get _platform => _isVline
       ? ''
@@ -277,7 +282,7 @@ class _TripDetailsSheetState extends State<TripDetailsSheet> {
     final timeStr = scheduledTime != null
         ? '${scheduledTime.hour.toString().padLeft(2, '0')}:${scheduledTime.minute.toString().padLeft(2, '0')}'
         : '';
-    final platform = _platform.isNotEmpty ? ' • Plat $_platform' : '';
+    final platform = _platform.isNotEmpty ? ' • $_platLabel $_platform' : '';
     final status = departure?.status.label ?? 'On Time';
     final stopCount = _displayStopsSequence.isNotEmpty ? '${_displayStopsSequence.length} stops' : '';
 
@@ -412,15 +417,17 @@ class _TripDetailsSheetState extends State<TripDetailsSheet> {
                     color: Theme.of(context).colorScheme.primary,
                   ),
                   VerticalDivider(width: 1, color: scheme.outlineVariant),
-                  // V/Line has no platform data; trams and buses have stops,
-                  // not platforms.
+                  // V/Line has no platform data; trams have stops, not
+                  // platforms. Buses only show a bay at proper stations.
                   if (!_isVline &&
                       (_platform.isNotEmpty ||
                           departure?.type == TransitType.metro)) ...[
                     _buildDetailItem(
                       icon: Icons.signpost_rounded,
-                      label: 'Platform',
-                      value: _platform.isNotEmpty ? 'Plat $_platform' : 'TBA',
+                      label: departure?.type.platformNoun ?? 'Platform',
+                      value: _platform.isNotEmpty
+                          ? '$_platLabel $_platform'
+                          : 'TBA',
                       color: scheme.onSurfaceVariant,
                     ),
                     VerticalDivider(width: 1, color: scheme.outlineVariant),
@@ -546,7 +553,7 @@ class _TripDetailsSheetState extends State<TripDetailsSheet> {
             _buildTimelineItem(
               station: widget.selectedStation,
               title: widget.selectedStation.name,
-              subtitle: 'Origin Station • Departs $timeStr',
+              subtitle: '${_isBus ? 'Origin Stop' : 'Origin Station'} • Departs $timeStr',
               isFirst: true,
               isLast: false,
               color: badgeColor,
@@ -582,10 +589,10 @@ class _TripDetailsSheetState extends State<TripDetailsSheet> {
                     ? '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}'
                     : '';
                 final plat = _isVline ? '' : (stop['platform']?.toString() ?? '');
-                final platStr = plat.isNotEmpty ? ' • Plat $plat' : '';
+                final platStr = plat.isNotEmpty ? ' • $_platLabel $plat' : '';
 
                 final sub = isFirst
-                    ? 'Origin Station • Departs $tStr$platStr'
+                    ? '${_isBus ? 'Origin Stop' : 'Origin Station'} • Departs $tStr$platStr'
                     : (isLast
                         ? 'Terminus • Arrives $tStr$platStr'
                         : 'Stop ${i + 1} • $tStr$platStr');

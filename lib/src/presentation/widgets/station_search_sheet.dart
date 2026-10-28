@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../domain/entities/station.dart';
@@ -13,6 +15,9 @@ class StationSearchSheet extends StatefulWidget {
   final Position? userPosition;
   final PtvMode activeMode;
   final Future<Station?> Function()? onLocateNearest;
+
+  /// Live stop search, for modes with no downloaded stop list.
+  final Future<List<Station>> Function(String query)? onRemoteSearch;
   final ValueChanged<Station> onStationSelected;
   final ValueChanged<Station> onToggleFavorite;
   final ScrollController? scrollController;
@@ -26,6 +31,7 @@ class StationSearchSheet extends StatefulWidget {
     this.userPosition,
     this.activeMode = PtvMode.metroTrain,
     this.onLocateNearest,
+    this.onRemoteSearch,
     required this.onStationSelected,
     required this.onToggleFavorite,
     this.scrollController,
@@ -40,6 +46,7 @@ class StationSearchSheet extends StatefulWidget {
     Position? userPosition,
     PtvMode activeMode = PtvMode.metroTrain,
     Future<Station?> Function()? onLocateNearest,
+    Future<List<Station>> Function(String query)? onRemoteSearch,
     required ValueChanged<Station> onStationSelected,
     required ValueChanged<Station> onToggleFavorite,
   }) {
@@ -66,6 +73,7 @@ class StationSearchSheet extends StatefulWidget {
               userPosition: userPosition,
               activeMode: activeMode,
               onLocateNearest: onLocateNearest,
+              onRemoteSearch: onRemoteSearch,
               onStationSelected: (st) {
                 Navigator.of(context).pop();
                 onStationSelected(st);
@@ -87,9 +95,44 @@ class _StationSearchSheetState extends State<StationSearchSheet> {
   final TextEditingController _controller = TextEditingController();
   String _query = '';
   bool _isLocating = false;
+  Timer? _debounce;
+  List<Station> _remote = const [];
+  bool _searching = false;
+
+  bool get _isBus => widget.activeMode == PtvMode.metroBus;
+  bool get _isStopMode => widget.activeMode == PtvMode.metroTram || _isBus;
+  Color get _accent =>
+      _isBus ? AppColors.melbourneBus : AppColors.melbourneTram;
+  IconData get _modeIcon =>
+      _isBus ? Icons.directions_bus_rounded : Icons.tram_rounded;
+
+  void _onQueryChanged(String val) {
+    setState(() => _query = val);
+    final search = widget.onRemoteSearch;
+    if (search == null) return;
+    _debounce?.cancel();
+    if (val.trim().length < 2) {
+      setState(() {
+        _remote = const [];
+        _searching = false;
+      });
+      return;
+    }
+    setState(() => _searching = true);
+    _debounce = Timer(const Duration(milliseconds: 350), () async {
+      final q = val;
+      final found = await search(q);
+      if (!mounted || _query != q) return;
+      setState(() {
+        _remote = found;
+        _searching = false;
+      });
+    });
+  }
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _controller.dispose();
     super.dispose();
   }
@@ -103,7 +146,14 @@ class _StationSearchSheetState extends State<StationSearchSheet> {
   List<Station> get _filteredStations {
     if (_query.isEmpty) return widget.stations;
     final q = _query.toLowerCase().trim();
-    return widget.stations.where((s) => s.name.toLowerCase().contains(q)).toList();
+    final local =
+        widget.stations.where((s) => s.name.toLowerCase().contains(q)).toList();
+    if (widget.onRemoteSearch == null) return local;
+    return [
+      ...local,
+      for (final r in _remote)
+        if (!local.any((l) => l.stopId == r.stopId)) r,
+    ];
   }
 
   @override
@@ -132,7 +182,7 @@ class _StationSearchSheetState extends State<StationSearchSheet> {
           child: Row(
             children: [
               Text(
-                'Select Station',
+                _isBus ? 'Select Bus Stop' : 'Select Station',
                 style: theme.textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.bold,
                 ),
@@ -141,14 +191,14 @@ class _StationSearchSheetState extends State<StationSearchSheet> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: (widget.activeMode == PtvMode.metroTram
-                          ? AppColors.melbourneTram
+                  color: (_isStopMode
+                          ? _accent
                           : AppColors.melbourneMetro)
                       .withAlpha(25),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: (widget.activeMode == PtvMode.metroTram
-                            ? AppColors.melbourneTram
+                    color: (_isStopMode
+                            ? _accent
                             : AppColors.melbourneMetro)
                         .withAlpha(70),
                     width: 1,
@@ -158,22 +208,24 @@ class _StationSearchSheetState extends State<StationSearchSheet> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
-                      widget.activeMode == PtvMode.metroTram
-                          ? Icons.tram_rounded
+                      _isStopMode
+                          ? _modeIcon
                           : Icons.train_rounded,
                       size: 15,
-                      color: widget.activeMode == PtvMode.metroTram
-                          ? AppColors.melbourneTram
+                      color: _isStopMode
+                          ? _accent
                           : AppColors.melbourneMetro,
                     ),
                     const SizedBox(width: 5),
                     Text(
-                      '${widget.stations.length} ${widget.activeMode == PtvMode.metroTram ? 'stops' : 'stations'}',
+                      _isBus
+                          ? 'Live search'
+                          : '${widget.stations.length} ${_isStopMode ? 'stops' : 'stations'}',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
-                        color: widget.activeMode == PtvMode.metroTram
-                            ? AppColors.melbourneTram
+                        color: _isStopMode
+                            ? _accent
                             : AppColors.melbourneMetro,
                       ),
                     ),
@@ -190,15 +242,17 @@ class _StationSearchSheetState extends State<StationSearchSheet> {
             controller: _controller,
             autofocus: false,
             decoration: InputDecoration(
-              hintText: widget.activeMode == PtvMode.metroTram
+              hintText: _isBus
+                  ? 'Search bus stop or interchange (e.g. Huntingdale)...'
+                  : _isStopMode
                   ? 'Search tram stop (e.g. Bourke St, Collins St)...'
                   : 'Search station name (e.g. Flinders, Richmond)...',
               prefixIcon: Icon(
-                widget.activeMode == PtvMode.metroTram
-                    ? Icons.tram_rounded
+                _isStopMode
+                    ? _modeIcon
                     : Icons.search_rounded,
-                color: widget.activeMode == PtvMode.metroTram
-                    ? AppColors.melbourneTram
+                color: _isStopMode
+                    ? _accent
                     : null,
               ),
               suffixIcon: _query.isNotEmpty
@@ -206,13 +260,13 @@ class _StationSearchSheetState extends State<StationSearchSheet> {
                       icon: const Icon(Icons.clear_rounded),
                       onPressed: () {
                         _controller.clear();
-                        setState(() => _query = '');
+                        _onQueryChanged('');
                       },
                     )
                   : null,
             ),
             onChanged: (val) {
-              setState(() => _query = val);
+              _onQueryChanged(val);
             },
           ),
         ),
@@ -244,7 +298,9 @@ class _StationSearchSheetState extends State<StationSearchSheet> {
                       )
                     : const Icon(Icons.my_location_rounded, size: 16),
                 label: Text(
-                  _isLocating ? 'Locating closest station...' : 'Find Nearest Station (GPS)',
+                  _isLocating
+                      ? 'Locating closest ${_isBus ? 'stop' : 'station'}...'
+                      : 'Find Nearest ${_isBus ? 'Stop' : 'Station'} (GPS)',
                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                 ),
                 onPressed: _isLocating
@@ -371,7 +427,11 @@ class _StationSearchSheetState extends State<StationSearchSheet> {
                       Icon(Icons.search_off_rounded, size: 48, color: Colors.grey.withAlpha(120)),
                       const SizedBox(height: 12),
                       Text(
-                        'No stations matching "$_query"',
+                        _searching
+                            ? 'Searching…'
+                            : _query.isEmpty && _isBus
+                            ? 'Search for a bus stop, or use GPS.'
+                            : 'No ${_isBus ? 'stops' : 'stations'} matching "$_query"',
                         style: const TextStyle(color: Colors.grey),
                       ),
                     ],
@@ -415,23 +475,23 @@ class _StationSearchSheetState extends State<StationSearchSheet> {
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
                             color: isSelected
-                                ? (widget.activeMode == PtvMode.metroTram
-                                    ? AppColors.melbourneTram
+                                ? (_isStopMode
+                                    ? _accent
                                     : Theme.of(context).colorScheme.primary)
                                 : theme.dividerColor.withAlpha(20),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Icon(
-                            widget.activeMode == PtvMode.metroTram
-                                ? Icons.tram_rounded
+                            _isStopMode
+                                ? _modeIcon
                                 : (st.isCityLoop
                                     ? Icons.subway_rounded
                                     : Icons.train_rounded),
                             size: 20,
                             color: isSelected
                                 ? Colors.white
-                                : (widget.activeMode == PtvMode.metroTram
-                                    ? AppColors.melbourneTram
+                                : (_isStopMode
+                                    ? _accent
                                     : Theme.of(context).colorScheme.primary),
                           ),
                         ),

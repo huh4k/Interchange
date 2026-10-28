@@ -607,11 +607,24 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Locates the device and returns the closest station; callers are
   /// responsible for selecting it.
+  /// Live stop search for modes without a downloaded stop list.
+  Future<List<Station>> searchLiveStops(String query) => ptvService
+      .searchStations(query, routeType: _activeMode.ptvRouteType);
+
   Future<Station?> locateNearestStation() async {
     _isLocating = true;
     notifyListeners();
     try {
       final pos = await locationService.getCurrentPosition();
+      if (pos != null && _activeMode.isLiveOnly) {
+        _userPosition = pos;
+        final nearby = await ptvService.nearbyStops(
+          pos.latitude,
+          pos.longitude,
+          routeType: _activeMode.ptvRouteType,
+        );
+        return nearby.isEmpty ? null : nearby.first;
+      }
       if (pos != null) {
         _userPosition = pos;
         final nearest = LocationService.findClosestStation(
@@ -858,6 +871,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
       _loadingStatus = 'Downloading ${switch (_activeMode) {
         PtvMode.metroTram => 'Tram',
         PtvMode.regionalTrain => 'V/Line',
+        PtvMode.metroBus => 'Bus',
         _ => 'Metro Train',
       }} Timetable: 5%';
       _errorMessage = null;
@@ -917,6 +931,8 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
 
       var liveFeedFailed = false;
       Future<List<Trip>> loadLiveTrips(Station s) async {
+        // Live-only modes have no stop until the user picks one.
+        if (_activeMode.isLiveOnly && s.stopId.isEmpty) return <Trip>[];
         try {
           final trips = await ptvService.fetchDepartures(
             s.stopId,
@@ -949,7 +965,9 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
       final Future<List<Trip>>? speculativeTrips =
           specId != null ? loadLiveTrips(requestedStation) : null;
 
-      final dynamicStops = canReuseStations
+      final dynamicStops = stationsMode.isLiveOnly
+          ? <Station>[]
+          : canReuseStations
           ? cachedStops
           : await repository.getStopsForMode(
               stationsMode,
@@ -959,7 +977,9 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
         _stationsByMode[stationsMode] = dynamicStops;
       }
 
-      final stationList = dynamicStops.isNotEmpty
+      final stationList = stationsMode.isLiveOnly
+          ? [if (requestedStation.stopId.isNotEmpty) requestedStation]
+          : dynamicStops.isNotEmpty
           ? dynamicStops
           : [MelbourneGtfsService.defaultStationForMode(stationsMode)];
 
@@ -999,6 +1019,8 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
       List<Trip> mergedTrips = [];
       if (livePtvTrips.isNotEmpty) {
         mergedTrips = livePtvTrips;
+      } else if (_activeMode.isLiveOnly) {
+        // No static timetable exists for this mode.
       } else {
         // Fallback to static GTFS scheduled trips only if live PTV API returned empty
         updateProgress(0.85, 'Loading Scheduled Timetable Fallback...');

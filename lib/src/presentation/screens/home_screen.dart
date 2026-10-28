@@ -139,6 +139,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       userPosition: viewModel.userPosition,
                       activeMode: viewModel.activeMode,
                       onLocateNearest: viewModel.locateNearestStation,
+                      onRemoteSearch: viewModel.activeMode.isLiveOnly
+                          ? viewModel.searchLiveStops
+                          : null,
                       onStationSelected: viewModel.selectStation,
                       onToggleFavorite: viewModel.toggleFavoriteStation,
                     ),
@@ -157,15 +160,21 @@ class _HomeScreenState extends State<HomeScreen> {
                           ? 'Filter saved departures...'
                           : viewModel.activeMode == PtvMode.metroTram
                           ? 'Filter tram routes at ${viewModel.selectedStation.name}...'
+                          : viewModel.activeMode == PtvMode.metroBus
+                          ? 'Filter bus routes at ${viewModel.selectedStation.name}...'
                           : viewModel.activeMode == PtvMode.regionalTrain
                           ? 'Filter V/Line services at ${viewModel.selectedStation.name}...'
                           : 'Filter train lines at ${viewModel.selectedStation.name}...',
                       prefixIcon: Icon(
                         viewModel.activeMode == PtvMode.metroTram
                             ? Icons.tram_rounded
+                            : viewModel.activeMode == PtvMode.metroBus
+                            ? Icons.directions_bus_rounded
                             : Icons.search_rounded,
                         color: viewModel.activeMode == PtvMode.metroTram
                             ? AppColors.melbourneTram
+                            : viewModel.activeMode == PtvMode.metroBus
+                            ? AppColors.melbourneBus
                             : null,
                       ),
                       suffixIcon: viewModel.searchQuery.isNotEmpty
@@ -365,6 +374,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 isSavedView: isSavedView,
                 filterText: viewModel.searchQuery,
                 hasError: viewModel.errorMessage != null,
+                noStopSelected: !isSavedView &&
+                    viewModel.activeMode.isLiveOnly &&
+                    viewModel.selectedStation.stopId.isEmpty,
                 onReset: isSavedView
                     ? () => viewModel.selectNavIndex(0)
                     : () {

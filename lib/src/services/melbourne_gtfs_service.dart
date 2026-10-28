@@ -64,8 +64,23 @@ class MelbourneGtfsService {
     routes: [],
   );
 
+  /// Bus has no default: the user searches for a stop or snaps to the nearest.
+  static const Station busPlaceholder = Station(
+    id: '',
+    stopId: '',
+    name: 'Choose a bus stop',
+    code: '',
+    lat: 0.0,
+    lon: 0.0,
+    suburb: '',
+    zone: '',
+    routes: [],
+  );
+
   static Station defaultStationForMode(PtvMode mode) {
     switch (mode) {
+      case PtvMode.metroBus:
+        return busPlaceholder;
       case PtvMode.metroTram:
         return defaultTramStop;
       case PtvMode.regionalTrain:

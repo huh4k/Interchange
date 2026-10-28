@@ -248,6 +248,8 @@ class PtvRealtimeService {
     if (routeType == 1) {
       return idInt >= 2001 && idInt <= 3500;
     }
+    // Bus stop ids only ever come from the PTV API, so they are always valid.
+    if (routeType == 2) return true;
     return !stopId.startsWith('19') &&
         !stopId.startsWith('20') &&
         !stopId.startsWith('22');
@@ -402,6 +404,34 @@ class PtvRealtimeService {
       _cachedDisruptions = alerts;
       _disruptionsFetchedAt = DateTime.now();
       return alerts;
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Stops of [routeType] within [maxDistanceMeters] of a point, nearest first.
+  Future<List<Station>> nearbyStops(
+    double lat,
+    double lon, {
+    int routeType = 2,
+    int maxDistanceMeters = 800,
+  }) async {
+    if (!EnvService.isConfigured) return [];
+    final signedUrl = generateSignedUrl(
+      '/v3/stops/location/$lat,$lon?route_types=$routeType'
+      '&max_distance=$maxDistanceMeters&max_results=20',
+    );
+    try {
+      final response = await _get(signedUrl);
+      if (response.statusCode != 200) return [];
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      final stops = data['stops'] as List?;
+      if (stops == null) return [];
+      return [
+        for (final stop in stops)
+          if (stop is Map<String, dynamic>)
+            Station.fromPtv(stop, routeType: routeType),
+      ];
     } catch (_) {
       return [];
     }

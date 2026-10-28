@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../domain/entities/station.dart';
 import '../../../domain/entities/trips.dart';
+import '../../../domain/value_objects/transit_type.dart';
 import '../../../theme/app_theme.dart';
 import '../../state/transit_view_model.dart';
 import '../common/ui_kit.dart';
@@ -48,10 +49,40 @@ class StationDeparturesSheetState extends State<StationDeparturesSheet> {
     }
   }
 
+  /// Trips in display order. Where a bus station has several bays, trips are
+  /// grouped under a "Bay N" label; otherwise the list stays chronological.
+  List<Object> _rows() {
+    final isBus =
+        _trips.isNotEmpty && _trips.first.departure?.type == TransitType.bus;
+    final bays = {
+      for (final t in _trips)
+        if ((t.departure?.platform ?? '').isNotEmpty) t.departure!.platform,
+    };
+    if (!isBus || bays.length < 2) return List<Object>.of(_trips);
+
+    int bayOrder(String b) => int.tryParse(b) ?? 1 << 20;
+    final sortedBays = bays.toList()
+      ..sort((a, b) {
+        final c = bayOrder(a).compareTo(bayOrder(b));
+        return c != 0 ? c : a.compareTo(b);
+      });
+    final rows = <Object>[];
+    for (final bay in [...sortedBays, '']) {
+      final inBay = _trips
+          .where((t) => (t.departure?.platform ?? '') == bay)
+          .toList();
+      if (inBay.isEmpty) continue;
+      rows.add(bay.isEmpty ? 'Other departures' : 'Bay $bay');
+      rows.addAll(inBay);
+    }
+    return rows;
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final station = widget.station;
+    final rows = _rows();
 
     return DraggableScrollableSheet(
       expand: false,
@@ -133,7 +164,11 @@ class StationDeparturesSheetState extends State<StationDeparturesSheet> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(
-                              Icons.train_outlined,
+                              station.stopId.isNotEmpty &&
+                                      _trips.firstOrNull?.departure?.type ==
+                                          TransitType.bus
+                                  ? Icons.directions_bus_outlined
+                                  : Icons.train_outlined,
                               size: 48,
                               color: theme.colorScheme.onSurfaceVariant,
                             ),
@@ -160,10 +195,17 @@ class StationDeparturesSheetState extends State<StationDeparturesSheet> {
                         horizontal: 16,
                         vertical: 8,
                       ),
-                      itemCount: _trips.length,
+                      itemCount: rows.length,
                       separatorBuilder: (_, _) => const SizedBox(height: 2),
                       itemBuilder: (context, index) {
-                        final trip = _trips[index];
+                        final row = rows[index];
+                        if (row is String) {
+                          return Padding(
+                            padding: const EdgeInsets.fromLTRB(4, 10, 4, 2),
+                            child: SectionLabel(row),
+                          );
+                        }
+                        final trip = row as Trip;
                         return TripCardWidget(
                           trip: trip,
                           isFavorite: widget.viewModel.isFavoriteTrip(

@@ -12,12 +12,16 @@ class EmptyStateWidget extends StatelessWidget {
   /// not load" rather than "nothing matches".
   final bool hasError;
 
+  /// A live-only mode (bus) with no stop chosen yet.
+  final bool noStopSelected;
+
   const EmptyStateWidget({
     super.key,
     required this.isSavedView,
     required this.onReset,
     this.filterText = '',
     this.hasError = false,
+    this.noStopSelected = false,
   });
 
   @override
@@ -32,7 +36,14 @@ class EmptyStateWidget extends StatelessWidget {
     final String action;
     final IconData actionIcon;
 
-    if (isSavedView) {
+    if (noStopSelected) {
+      icon = Icons.directions_bus_rounded;
+      title = 'Pick a bus stop';
+      subtitle =
+          'Search for a stop or interchange above, or snap to your nearest stop.';
+      action = '';
+      actionIcon = Icons.directions_bus_rounded;
+    } else if (isSavedView) {
       icon = Icons.star_border_rounded;
       title = filter.isEmpty
           ? 'No saved departures yet'
@@ -85,12 +96,14 @@ class EmptyStateWidget extends StatelessWidget {
                 style: theme.textTheme.bodySmall?.copyWith(color: muted),
               ),
             ],
+            if (!noStopSelected) ...[
             const SizedBox(height: 16),
             OutlinedButton.icon(
               onPressed: onReset,
               icon: Icon(actionIcon, size: 16),
               label: Text(action),
             ),
+            ],
           ],
         ),
       ),

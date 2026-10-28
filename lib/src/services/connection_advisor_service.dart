@@ -34,7 +34,11 @@ class ConnectionAdvisorService {
     // Determine route type from the active trip so we use the correct PTV API endpoint
     final tripType = activeTrip.departure?.type;
     final activeRouteType = tripType?.value ?? 0;
-    final activeMode = tripType == TransitType.tram ? PtvMode.metroTram : PtvMode.metroTrain;
+    final activeMode = tripType == TransitType.tram
+        ? PtvMode.metroTram
+        : tripType == TransitType.bus
+            ? PtvMode.metroBus
+            : PtvMode.metroTrain;
 
     // Find index of current / next station in trip stop sequence
     int startIndex = 0;

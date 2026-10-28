@@ -105,11 +105,20 @@ class Station {
     // Determine if this is a tram stop: passed explicitly, or detected from route_type in the map
     final resolvedRouteType = routeType ?? (map['route_type'] as int?);
     final isTram = resolvedRouteType == 1;
+    final isBus = resolvedRouteType == 2;
 
     String cleanName;
     String code;
 
-    if (isTram) {
+    if (isBus) {
+      // Bus stops are "Stop name/Road (Suburb)": keep the road so same-named
+      // stops stay distinguishable; only drop the suburb qualifier.
+      cleanName = name
+          .replaceAll(RegExp(r'\s*\([^)]*\)\s*$'), '')
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
+      code = stopId;
+    } else if (isTram) {
       // Tram stops are intersection-based names like "Collins St/Elizabeth St #3".
       // Do NOT truncate on '/'. Normalise whitespace only.
       cleanName = name.replaceAll(RegExp(r'\s+'), ' ').trim();
@@ -132,6 +141,7 @@ class Station {
     final nameLower = cleanName.toLowerCase();
     // Tram stops are never city loop stops
     final isCityLoop = !isTram &&
+        !isBus &&
         (nameLower.contains('central') ||
             nameLower.contains('flinders') ||
             nameLower.contains('parliament') ||

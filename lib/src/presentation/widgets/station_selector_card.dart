@@ -64,6 +64,7 @@ class StationSelectorCard extends StatelessWidget {
   final Position? userPosition;
   final PtvMode activeMode;
   final Future<Station?> Function()? onLocateNearest;
+  final Future<List<Station>> Function(String query)? onRemoteSearch;
   final ValueChanged<Station> onStationSelected;
   final ValueChanged<Station>? onToggleFavorite;
 
@@ -76,6 +77,7 @@ class StationSelectorCard extends StatelessWidget {
     this.userPosition,
     this.activeMode = PtvMode.metroTrain,
     this.onLocateNearest,
+    this.onRemoteSearch,
     required this.onStationSelected,
     this.onToggleFavorite,
   });
@@ -110,6 +112,8 @@ class StationSelectorCard extends StatelessWidget {
     final scheme = theme.colorScheme;
     final accent = activeMode == PtvMode.metroTram
         ? AppColors.melbourneTram
+        : activeMode == PtvMode.metroBus
+        ? AppColors.melbourneBus
         : Theme.of(context).colorScheme.primary;
 
     return Material(
@@ -130,6 +134,7 @@ class StationSelectorCard extends StatelessWidget {
           userPosition: userPosition,
           activeMode: activeMode,
           onLocateNearest: onLocateNearest,
+          onRemoteSearch: onRemoteSearch,
           onStationSelected: onStationSelected,
           onToggleFavorite: onToggleFavorite ?? (_) {},
         );
@@ -148,6 +153,8 @@ class StationSelectorCard extends StatelessWidget {
               child: Icon(
                 activeMode == PtvMode.metroTram
                     ? Icons.tram_rounded
+                    : activeMode == PtvMode.metroBus
+                    ? Icons.directions_bus_rounded
                     : Icons.location_on_rounded,
                 color: accent,
                 size: 22,
@@ -219,7 +226,9 @@ class StationSelectorCard extends StatelessWidget {
                     onStationSelected(nearest);
                   }
                 },
-                tooltip: 'Snap to nearest station',
+                tooltip: activeMode == PtvMode.metroBus
+                    ? 'Snap to nearest stop'
+                    : 'Snap to nearest station',
               ),
             ],
             if (onToggleFavorite != null) ...[

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../domain/value_objects/ptv_mode.dart';
 
-/// A capsule-shaped sliding toggle that switches between Metro Train, Yarra Tram and V/Line modes.
+/// A capsule-shaped sliding toggle that switches between Metro Train, Yarra Tram, V/Line and Bus modes.
 ///
 /// Designed to be extensible: [modes] accepts any ordered list of [PtvMode] values,
 /// so further modes can be added later by simply appending to the list.
@@ -20,6 +20,7 @@ class TransitModeSlider extends StatelessWidget {
       PtvMode.metroTrain,
       PtvMode.metroTram,
       PtvMode.regionalTrain,
+      PtvMode.metroBus,
     ],
   });
 

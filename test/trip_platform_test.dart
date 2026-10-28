@@ -106,10 +106,42 @@ void main() {
       expect(find.text('TBA'), findsOneWidget);
     });
 
+    testWidgets('bus with a bay shows "Bay N", never "Plat"', (tester) async {
+      await open(tester, trip(TransitType.bus, platform: '3'));
+      expect(find.text('Bay 3'), findsOneWidget);
+      expect(find.textContaining('Plat '), findsNothing);
+    });
+
+    testWidgets('bus with no bay hides the tile', (tester) async {
+      await open(tester, trip(TransitType.bus));
+      expect(find.text('Bay'), findsNothing);
+      expect(find.text('TBA'), findsNothing);
+    });
+
     testWidgets('tram with no platform hides the tile', (tester) async {
       await open(tester, trip(TransitType.tram));
       expect(find.text('Platform'), findsNothing);
       expect(find.text('TBA'), findsNothing);
+    });
+  });
+
+  group('bus stations', () {
+    test('Station.fromPtv keeps the road for bus stops', () {
+      final st = Station.fromPtv({
+        'stop_id': 22345,
+        'stop_name': 'Huntingdale Station/Haughton Rd (Oakleigh)',
+      }, routeType: 2);
+      expect(st.name, 'Huntingdale Station/Haughton Rd');
+      expect(st.code, '22345');
+    });
+
+    test('bus stop ids are always direct PTV ids', () {
+      expect(PtvRealtimeService.isDirectStopId('22345', 2), isTrue);
+    });
+
+    test('bay labels', () {
+      expect(TransitType.bus.platformLabel, 'Bay');
+      expect(TransitType.metro.platformLabel, 'Plat');
     });
   });
 }

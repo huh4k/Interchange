@@ -88,7 +88,9 @@ class _LiveRideSheetState extends State<LiveRideSheet> {
             ? 'TRAM'
             : trip.departure?.type == TransitType.regionalTrain
                 ? 'V/LINE'
-                : 'METRO');
+                : trip.departure?.type == TransitType.bus
+                    ? 'BUS'
+                    : 'METRO');
     final lineColor =
         trip.departure?.lineColor ?? AppColors.melbourneMetro;
     final destination = trip.destinationName;
@@ -347,6 +349,8 @@ class _LiveRideSheetState extends State<LiveRideSheet> {
                     StopConnectionTile(
                       station: visibleStops[i].station,
                       platform: visibleStops[i].platform ?? '',
+                      platformLabel:
+                          trip.departure?.type.platformLabel ?? 'Plat',
                       departureTime: visibleStops[i].departureTime,
                       connections:
                           connectionsByStation[visibleStops[i].station.name] ??

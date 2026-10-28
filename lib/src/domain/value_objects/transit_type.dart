@@ -80,6 +80,12 @@ enum TransitType {
     }
   }
 
+  /// Short label for where a service departs from: buses use bays.
+  String get platformLabel => this == TransitType.bus ? 'Bay' : 'Plat';
+
+  /// Long form of [platformLabel], for summary tiles.
+  String get platformNoun => this == TransitType.bus ? 'Bay' : 'Platform';
+
   String get displayName {
     switch (this) {
       case TransitType.metro:
