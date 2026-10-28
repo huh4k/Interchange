@@ -21,6 +21,9 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     final vm = TransitViewModel(repository: MockRepositoryForSettings());
     await vm.initFuture;
+    tester.view.physicalSize = const Size(900, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
 
     await tester.pumpWidget(
       MultiProvider(
@@ -33,7 +36,7 @@ void main() {
     );
 
     expect(find.text('Metro buses'), findsOneWidget);
-    await tester.tap(find.widgetWithText(SwitchListTile, 'Metro buses'));
+    await tester.tap(find.text('Metro buses'));
     await tester.pump();
     expect(vm.enabledModes.contains(PtvMode.metroBus), isFalse);
 
