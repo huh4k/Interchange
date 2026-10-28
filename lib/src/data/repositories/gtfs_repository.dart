@@ -476,6 +476,7 @@ class PtvGtfsRepository implements IGtfsRepository {
 
     final routeInfo = timetable.routesById[tripInfo.routeId];
     final routeName = routeInfo?.longName ?? '';
+    // Route ids look like "57-W88-aus-1"; bus displayCode turns those into "W88".
     final lineCode = (routeInfo?.shortName.isNotEmpty == true)
         ? routeInfo!.shortName
         : tripInfo.routeId;

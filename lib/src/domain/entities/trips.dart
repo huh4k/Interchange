@@ -4,6 +4,15 @@ import '../value_objects/metro_line_colors.dart';
 import '../value_objects/transit_type.dart';
 import '../value_objects/service_status.dart';
 
+/// Badge text for a bus route. Services without a route number (and static
+/// route ids like "57-W88-aus-1") still get a consistent badge.
+String busRouteCode(String code) {
+  final c = code.trim();
+  if (c.isEmpty) return 'BUS';
+  final fromId = RegExp(r'^\d+-([^-]+)-aus-\d+$').firstMatch(c);
+  return fromId != null ? fromId.group(1)!.toUpperCase() : c;
+}
+
 class TripDeparture {
   final DateTime scheduledTime;
   final String platform;
@@ -28,11 +37,13 @@ class TripDeparture {
 
   /// Code for the line badge: the 3-letter code for known metro lines,
   /// otherwise the raw [lineCode].
-  String get displayCode =>
-      (type == TransitType.metro
-          ? metroLineCode(name: routeName, code: lineCode)
-          : null) ??
-      lineCode;
+  String get displayCode {
+    if (type == TransitType.bus) return busRouteCode(lineCode);
+    return (type == TransitType.metro
+            ? metroLineCode(name: routeName, code: lineCode)
+            : null) ??
+        lineCode;
+  }
 
   int minutesUntil(DateTime now) => scheduledTime.difference(now).inMinutes;
 
@@ -184,11 +195,14 @@ class Trip {
     final dest = run['destination_name']?.toString() ?? 'Unknown';
     final routeName = route['route_name']?.toString() ?? 'Unknown Route';
     final routeShort = route['route_number']?.toString();
+    final isBus = type == TransitType.bus;
 
     final departure = TripDeparture(
       scheduledTime: finalTime,
       platform: dep['platform_number']?.toString() ?? '',
-      lineCode: routeShort?.isNotEmpty == true ? routeShort! : routeName.split(' ').first,
+      lineCode: routeShort?.isNotEmpty == true
+          ? routeShort!
+          : (isBus ? '' : routeName.split(' ').first),
       routeName: routeName,
       destination: dest,
       type: type,
@@ -204,7 +218,9 @@ class Trip {
       routeId: route['route_id']?.toString() ?? '',
       serviceId: '',
       headsign: dest,
-      shortName: routeShort?.isNotEmpty == true ? routeShort : routeName.split(' ').first,
+      shortName: routeShort?.isNotEmpty == true
+          ? routeShort
+          : (isBus ? '' : routeName.split(' ').first),
       directionId: dep['direction_id'] ?? 0,
       departure: departure,
     );

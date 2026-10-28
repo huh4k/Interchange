@@ -287,7 +287,10 @@ class _TripDetailsSheetState extends State<TripDetailsSheet> {
     final stopCount = _displayStopsSequence.isNotEmpty ? '${_displayStopsSequence.length} stops' : '';
 
     final buffer = StringBuffer();
-    buffer.writeln('🚆 $lineCode Line: $origin ➔ $dest');
+    final isBus = departure?.type == TransitType.bus;
+    buffer.writeln(isBus
+        ? '🚌 ${departure!.displayCode} Bus: $origin ➔ $dest'
+        : '🚆 $lineCode Line: $origin ➔ $dest');
     if (timeStr.isNotEmpty) {
       buffer.writeln('⏰ Departs: $timeStr$platform ($status)');
     }

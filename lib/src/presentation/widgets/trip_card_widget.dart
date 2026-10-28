@@ -61,7 +61,8 @@ class TripCardWidget extends StatelessWidget {
     // Short codes (tram routes, "FKN") read well as a badge; long line names
     // ("Frankston") would just repeat the destination, so they become a
     // coloured line label under it instead.
-    final showBadge = lineCode.length <= 4;
+    // Buses always get one so every bus card shows its route the same way.
+    final showBadge = lineCode.length <= 4 || departure?.type == TransitType.bus;
     final lineLabel = routeName.isNotEmpty ? routeName : lineCode;
     final showLineLabel = lineLabel.isNotEmpty &&
         (lineLabel != destinationText || !showBadge);

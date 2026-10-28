@@ -135,6 +135,22 @@ void main() {
       expect(st.code, '22345');
     });
 
+    test('bus badge: number, route id fallback, or BUS', () {
+      expect(busRouteCode('200'), '200');
+      expect(busRouteCode('57-W88-aus-1'), 'W88');
+      expect(busRouteCode(''), 'BUS');
+    });
+
+    test('live bus without a route number does not use the first word of its name', () {
+      final trip = Trip.fromPtvDeparture(
+        {'scheduled_departure_utc': '2026-10-28T01:00:00Z'},
+        {'destination_name': 'Wallan'},
+        {'route_type': 2, 'route_name': 'Wallan Station - Springridge', 'route_id': 9, 'route_number': ''},
+      );
+      expect(trip.departure!.displayCode, 'BUS');
+      expect(trip.departure!.type, TransitType.bus);
+    });
+
     test('bus stop ids are always direct PTV ids', () {
       expect(PtvRealtimeService.isDirectStopId('22345', 2), isTrue);
     });
