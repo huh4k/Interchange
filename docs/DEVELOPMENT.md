@@ -1,0 +1,122 @@
+# Developing Interchange
+
+This page is for people who want to run Interchange from source or work on the code. If you just want to use the app, see the [README](../README.md).
+
+## Tech stack
+
+- **Flutter and Dart** for iOS, Android, macOS and Windows
+- **PTV Timetable API v3** for live departures and disruptions
+- **GTFS static data**, hosted on Cloudflare R2, parsed and cached on device
+
+## Getting started
+
+### Prerequisites
+
+- Flutter SDK (`>=3.12.2`) and Dart SDK (`^3.12.2`)
+- An iOS simulator, Android emulator or physical device
+- A PTV Developer ID and API key (request one from PTV by email)
+
+### Setup
+
+```bash
+git clone https://github.com/huh4k/Interchange.git
+cd Interchange
+flutter pub get
+```
+
+To run with your own key, create a `.env` file in the project root (it's optional, since the proxy is the default):
+
+```env
+PTV_USER_ID=your_ptv_dev_id
+PTV_API_KEY=your_ptv_api_key
+PTV_BASE_URL=https://timetableapi.ptv.vic.gov.au
+```
+
+Then run the app:
+
+```bash
+flutter run
+```
+
+### Tests
+
+```bash
+flutter test
+```
+
+## PTV API key
+
+No shipped build holds the PTV key. Requests go to a signing proxy, the Cloudflare Pages Function in [`functions/api/ptv`](../functions/api/ptv/%5B%5Bpath%5D%5D.js), which signs them server-side and forwards them to PTV. In the Pages project settings, add `PTV_USER_ID` and `PTV_API_KEY` as encrypted variables.
+
+| Build | Where requests go |
+|---|---|
+| Web (`interchange.huh4k.dev`, `beta.interchange.huh4k.dev`) | Its own origin, `/api/ptv` |
+| Android, iOS, desktop release builds | `https://interchange.huh4k.dev/api/ptv`, or your own via `--dart-define=PTV_PROXY_URL=...` |
+| Debug runs with a `.env` key | Signed locally, straight to PTV |
+
+The proxy only answers trusted callers: the website itself, or a client that sends the shared secret in an `X-Interchange-Key` header. Pick a secret and add it to the Pages project as an encrypted `APP_KEY` variable:
+
+```bash
+openssl rand -hex 32
+```
+
+Then pass the same value when you build an app you hand out. It's a build-time define, never part of `.env` or the repo:
+
+```bash
+flutter build apk --release --dart-define=APP_KEY=your_secret
+```
+
+Anything shipped in an app can be extracted, so this keeps casual users off the proxy rather than stopping a determined one. If it leaks, change `APP_KEY` in Pages and rebuild.
+
+Release builds ignore the key in `.env`, but `.env` is still bundled as an asset. Empty it before a release build, or the key ships inside it:
+
+```bash
+mv .env .env.dev && touch .env && flutter build apk --release; mv .env.dev .env
+```
+
+Web deploys run from [`cloudflare.yml`](../.github/workflows/cloudflare.yml) with an empty `.env`.
+
+## GTFS data
+
+The app doesn't download the 268 MB statewide PTV feed. Each mode (`metro`, `tram`, `vline`, `metroBus`) uses two files hosted on Cloudflare R2, at the base URL in [`gtfs_config.dart`](../lib/src/core/gtfs_config.dart):
+
+| File | Used for |
+|---|---|
+| `<mode>/stops.txt` | Station list, revalidated with ETags |
+| `<mode>.zip` | Scheduled timetable fallback (routes, trips, stop times, calendars), fetched only when needed |
+
+**Buses** are the exception: the trimmed timetable is about 50 MB (roughly 400 MB once extracted), so the app asks before the first download on mobile and desktop. Choosing "Live only" keeps buses on live PTV data, with stop search and GPS lookup through the PTV API. Web never caches the zip, so it isn't asked.
+
+<details>
+<summary><b>Publishing a new feed</b></summary>
+
+<br />
+
+1. Download the statewide `gtfs.zip` from [Victoria's open data portal](https://opendata.transport.vic.gov.au/dataset/gtfs-schedule).
+2. Build the per-mode files:
+
+   ```bash
+   python3 tool/build_gtfs_r2.py path/to/gtfs.zip out_dir
+   ```
+
+3. Upload the contents of `out_dir` to the R2 bucket at the base URL's path, keeping the `metro/`, `tram/`, `vline/` and `metroBus/` folders.
+
+   The metro bus feed is by far the largest, so the script trims it to services running in the next 21 days and to the columns the app reads. Re-publish at least that often. If `metroBus` isn't uploaded, buses still work from live PTV data alone, without the scheduled fallback.
+
+</details>
+
+## Project structure
+
+```text
+lib/
+├── main.dart
+└── src/
+    ├── core/            config, HTTP and CSV helpers
+    ├── data/            GTFS repository, index and timetable
+    ├── domain/          entities and value objects
+    ├── presentation/    screens, widgets and state
+    ├── services/        PTV API, location, favourites
+    └── theme/
+tool/
+└── build_gtfs_r2.py     builds the per-mode GTFS files
+```

@@ -6,155 +6,94 @@
 
 **Live Melbourne public transport, in one fast app.**
 
-Metro trains, Yarra trams, V/Line and metro buses, with live departures, ride tracking and connections.
+See when your next train, tram, V/Line or bus is actually leaving, follow your trip as it happens, and know whether you'll make your connection.
 
 [![Latest release](https://img.shields.io/github/v/release/huh4k/Interchange?style=flat-square&color=0072CE)](https://github.com/huh4k/Interchange/releases)
 [![License: GPL v3](https://img.shields.io/badge/license-GPLv3-78BE20?style=flat-square)](LICENSE)
-![Flutter](https://img.shields.io/badge/Flutter-3.x-8F1A95?style=flat-square)
 
 [**Download the latest release**](https://github.com/huh4k/Interchange/releases) · [Report an issue](https://github.com/huh4k/Interchange/issues)
+
+<br />
+
+<img src="docs/screenshots/departures.png" alt="Live train departures from Flinders Street" width="240" />
+&nbsp;
+<img src="docs/screenshots/trams.png" alt="Live tram departures" width="240" />
+&nbsp;
+<img src="docs/screenshots/tracking.png" alt="Following a trip stop by stop" width="240" />
 
 </div>
 
 ---
 
-## Download
+## What it does
 
-Grab the latest build for your platform from the **[Releases page](https://github.com/huh4k/Interchange/releases)**. Each release lists what changed since the last one.
+Open the app, pick a station, and see what's leaving next. That's it.
 
-To run from source instead, see [Getting Started](#getting-started).
+### One tap between networks
 
-## Features
+Switch between **Trains**, **Trams**, **V/Line** and **Buses** from the bar at the top. Each one has its own colour, so you always know which network you're looking at.
 
-| | |
-|---|---|
-| 🚆 **Four networks** | Switch between Metro trains, Yarra trams, V/Line and metro buses with one tap |
-| 🚌 **Buses** | Find any metro bus stop by live search or GPS, with a route badge on every service and a bay shown at bus stations |
-| ⏱️ **Live departures** | Real-time data from the PTV Timetable API, with the GTFS timetable as a fallback, flagged with a warning that its times may not be accurate |
-| 📍 **Live ride tracking** | Follow your trip stop by stop, including "Between X and Y" while travelling |
-| 🚶 **Leave by** | Opt-in walking time to your station, with a "Leave by" time on each departure and services you can't reach dimmed |
-| 🔁 **Connection advisor** | Checks whether you'll make a transfer at key interchange stations |
-| ⚠️ **Disruptions** | Alerts for the lines and stations you care about |
-| ⭐ **Favourites and search** | Fast station search, recents and saved stations |
+### Live departures
 
-## Tech Stack
+Every service shows its platform, whether it's **on time**, and a countdown ("Now", "4 min"). Times are live from Public Transport Victoria. If live data isn't available, the app falls back to the timetable and warns you that those times may not be accurate.
 
-- **Flutter and Dart** for iOS, Android, macOS and Windows
-- **PTV Timetable API v3** for live departures and disruptions
-- **GTFS static data**, hosted on Cloudflare R2, parsed and cached on device
+### Follow your trip
 
-## Getting Started
+Tap a service to see every stop on its route with the time it gets there, and which stops connect to other trains or trams. Hit **Track My Ride** to follow along while you travel; the app tells you where you are, like "Between Richmond and Burnley".
 
-### Prerequisites
+<div align="center">
+<img src="docs/screenshots/tracking.png" alt="A tram trip with its stop-by-stop sequence" width="260" />
+</div>
 
-- Flutter SDK (`>=3.12.2`) and Dart SDK (`^3.12.2`)
-- An iOS simulator, Android emulator or physical device
-- A PTV Developer ID and API key (request one from PTV by email)
+### Know when to leave
 
-### Setup
+Turn on **Show walking time** and each departure gets a "Leave by" time. Services you can't reach in time are dimmed, so you don't sprint for a train you'll miss.
 
-```bash
-git clone https://github.com/huh4k/Interchange.git
-cd Interchange
-flutter pub get
-```
+### Connections
 
-To run with your own key, create a `.env` file in the project root (it's optional, since the proxy is the default):
+At key interchange stations, Interchange checks whether you'll make your transfer.
 
-```env
-PTV_USER_ID=your_ptv_dev_id
-PTV_API_KEY=your_ptv_api_key
-PTV_BASE_URL=https://timetableapi.ptv.vic.gov.au
-```
+### Disruptions
 
-Then run the app:
+The Disruptions tab shows live alerts for **My Stations** (the ones you've starred) or **All Lines**, and carries a badge when something's up. Cancellations also appear right on your departures screen.
 
-```bash
-flutter run
-```
+<div align="center">
+<img src="docs/screenshots/disruptions.png" alt="Disruptions tab showing live service alerts" width="260" />
+</div>
 
-### Tests
+### Save what you use
 
-```bash
-flutter test
-```
+Star a departure to keep it on the **Saved** tab, and star a station to get its disruption alerts. Search is fast, and the app remembers your recent stations. Tap the location button to find the nearest stop with GPS.
 
-## PTV API key
+<div align="center">
+<img src="docs/screenshots/saved.png" alt="Saved departures" width="260" />
+</div>
 
-No shipped build holds the PTV key. Requests go to a signing proxy, the Cloudflare Pages Function in [`functions/api/ptv`](functions/api/ptv/%5B%5Bpath%5D%5D.js), which signs them server-side and forwards them to PTV. In the Pages project settings, add `PTV_USER_ID` and `PTV_API_KEY` as encrypted variables.
+### Buses too
 
-| Build | Where requests go |
-|---|---|
-| Web (`interchange.huh4k.dev`, `beta.interchange.huh4k.dev`) | Its own origin, `/api/ptv` |
-| Android, iOS, desktop release builds | `https://interchange.huh4k.dev/api/ptv`, or your own via `--dart-define=PTV_PROXY_URL=...` |
-| Debug runs with a `.env` key | Signed locally, straight to PTV |
+Find any metro bus stop by searching or by GPS. Every service has a route badge, and bus stations show which bay to go to.
 
-The proxy only answers trusted callers: the website itself, or a client that sends the shared secret in an `X-Interchange-Key` header. Pick a secret and add it to the Pages project as an encrypted `APP_KEY` variable:
+## Get the app
 
-```bash
-openssl rand -hex 32
-```
+1. Go to the **[Releases page](https://github.com/huh4k/Interchange/releases)**.
+2. Download the latest build for your device.
+3. Install it and open Interchange.
 
-Then pass the same value when you build an app you hand out. It's a build-time define, never part of `.env` or the repo:
+Each release lists what's changed since the last one.
 
-```bash
-flutter build apk --release --dart-define=APP_KEY=your_secret
-```
+## Good to know
 
-Anything shipped in an app can be extracted, so this keeps casual users off the proxy rather than stopping a determined one. If it leaks, change `APP_KEY` in Pages and rebuild.
+- **Location is optional.** It's only used to find stops near you and to work out walking time.
+- **Buses and offline timetables.** The bus timetable is a large download (about 50 MB). On phones and desktop, the app asks before downloading it. Choose **Live only** to skip it and use live data alone. The web version never downloads it.
+- **Live data comes from PTV.** If PTV is having a bad day, the app tells you when it's showing timetable times instead.
 
-Release builds ignore the key in `.env`, but `.env` is still bundled as an asset. Empty it before a release build, or the key ships inside it:
+## Questions and problems
 
-```bash
-mv .env .env.dev && touch .env && flutter build apk --release; mv .env.dev .env
-```
+Found a bug, or want a feature? [Open an issue](https://github.com/huh4k/Interchange/issues).
 
-Web deploys run from [`cloudflare.yml`](.github/workflows/cloudflare.yml) with an empty `.env`.
+## For developers
 
-## GTFS data
-
-The app doesn't download the 268 MB statewide PTV feed. Each mode (`metro`, `tram`, `vline`, `metroBus`) uses two files hosted on Cloudflare R2, at the base URL in [`gtfs_config.dart`](lib/src/core/gtfs_config.dart):
-
-| File | Used for |
-|---|---|
-| `<mode>/stops.txt` | Station list, revalidated with ETags |
-| `<mode>.zip` | Scheduled timetable fallback (routes, trips, stop times, calendars), fetched only when needed |
-
-**Buses** are the exception: the trimmed timetable is about 50 MB (roughly 400 MB once extracted), so the app asks before the first download on mobile and desktop. Choosing "Live only" keeps buses on live PTV data, with stop search and GPS lookup through the PTV API. Web never caches the zip, so it isn't asked.
-
-<details>
-<summary><b>Publishing a new feed</b></summary>
-
-<br />
-
-1. Download the statewide `gtfs.zip` from [Victoria's open data portal](https://opendata.transport.vic.gov.au/dataset/gtfs-schedule).
-2. Build the per-mode files:
-
-   ```bash
-   python3 tool/build_gtfs_r2.py path/to/gtfs.zip out_dir
-   ```
-
-3. Upload the contents of `out_dir` to the R2 bucket at the base URL's path, keeping the `metro/`, `tram/`, `vline/` and `metroBus/` folders.
-
-   The metro bus feed is by far the largest, so the script trims it to services running in the next 21 days and to the columns the app reads. Re-publish at least that often. If `metroBus` isn't uploaded, buses still work from live PTV data alone, without the scheduled fallback.
-
-</details>
-
-## Project structure
-
-```text
-lib/
-├── main.dart
-└── src/
-    ├── core/            config, HTTP and CSV helpers
-    ├── data/            GTFS repository, index and timetable
-    ├── domain/          entities and value objects
-    ├── presentation/    screens, widgets and state
-    ├── services/        PTV API, location, favourites
-    └── theme/
-tool/
-└── build_gtfs_r2.py     builds the per-mode GTFS files
-```
+Want to run it from source or help out? See the [development guide](docs/DEVELOPMENT.md).
 
 ## License
 
