@@ -6,7 +6,7 @@
 
 **Live Melbourne public transport, in one fast app.**
 
-Metro trains, Yarra trams and V/Line, with live departures, ride tracking and connections.
+Metro trains, Yarra trams, V/Line and metro buses, with live departures, ride tracking and connections.
 
 [![Latest release](https://img.shields.io/github/v/release/huh4k/Interchange?style=flat-square&color=0072CE)](https://github.com/huh4k/Interchange/releases)
 [![License: GPL v3](https://img.shields.io/badge/license-GPLv3-78BE20?style=flat-square)](LICENSE)
@@ -28,8 +28,9 @@ To run from source instead, see [Getting Started](#getting-started).
 
 | | |
 |---|---|
-| 🚆 **Three networks** | Switch between Metro trains, Yarra trams and V/Line with one tap |
-| ⏱️ **Live departures** | Real-time data from the PTV Timetable API, with the GTFS timetable as a fallback |
+| 🚆 **Four networks** | Switch between Metro trains, Yarra trams, V/Line and metro buses with one tap |
+| 🚌 **Buses** | Find any metro bus stop by live search or GPS, with a route badge on every service and a bay shown at bus stations |
+| ⏱️ **Live departures** | Real-time data from the PTV Timetable API, with the GTFS timetable as a fallback, flagged with a warning that its times may not be accurate |
 | 📍 **Live ride tracking** | Follow your trip stop by stop, including "Between X and Y" while travelling |
 | 🚶 **Leave by** | Opt-in walking time to your station, with a "Leave by" time on each departure and services you can't reach dimmed |
 | 🔁 **Connection advisor** | Checks whether you'll make a transfer at key interchange stations |
@@ -112,12 +113,14 @@ Web deploys run from [`cloudflare.yml`](.github/workflows/cloudflare.yml) with a
 
 ## GTFS data
 
-The app doesn't download the 268 MB statewide PTV feed. Each mode (`metro`, `tram`, `vline`, `metroBus`) uses two small files hosted on Cloudflare R2, at the base URL in [`gtfs_config.dart`](lib/src/core/gtfs_config.dart):
+The app doesn't download the 268 MB statewide PTV feed. Each mode (`metro`, `tram`, `vline`, `metroBus`) uses two files hosted on Cloudflare R2, at the base URL in [`gtfs_config.dart`](lib/src/core/gtfs_config.dart):
 
 | File | Used for |
 |---|---|
 | `<mode>/stops.txt` | Station list, revalidated with ETags |
 | `<mode>.zip` | Scheduled timetable fallback (routes, trips, stop times, calendars), fetched only when needed |
+
+**Buses** are the exception: the trimmed timetable is about 50 MB (roughly 400 MB once extracted), so the app asks before the first download on mobile and desktop. Choosing "Live only" keeps buses on live PTV data, with stop search and GPS lookup through the PTV API. Web never caches the zip, so it isn't asked.
 
 <details>
 <summary><b>Publishing a new feed</b></summary>
@@ -133,7 +136,7 @@ The app doesn't download the 268 MB statewide PTV feed. Each mode (`metro`, `tra
 
 3. Upload the contents of `out_dir` to the R2 bucket at the base URL's path, keeping the `metro/`, `tram/`, `vline/` and `metroBus/` folders.
 
-   The metro bus feed is by far the largest, so the script trims it to services running in the next three weeks and to the columns the app reads. Re-publish at least that often. Until `metroBus` is uploaded the app still works for buses from live PTV data alone, without the scheduled fallback.
+   The metro bus feed is by far the largest, so the script trims it to services running in the next 21 days and to the columns the app reads. Re-publish at least that often. If `metroBus` isn't uploaded, buses still work from live PTV data alone, without the scheduled fallback.
 
 </details>
 
