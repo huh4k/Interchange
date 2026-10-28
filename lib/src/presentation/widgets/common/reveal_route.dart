@@ -10,18 +10,19 @@ class RevealRoute<T> extends PageRouteBuilder<T> {
   RevealRoute({required WidgetBuilder builder, required Offset origin})
     : super(
         pageBuilder: (context, _, _) => builder(context),
-        transitionDuration: const Duration(milliseconds: 520),
-        reverseTransitionDuration: const Duration(milliseconds: 420),
+        transitionDuration: const Duration(milliseconds: 300),
+        reverseTransitionDuration: const Duration(milliseconds: 230),
         transitionsBuilder: (context, animation, _, child) {
           final accent = Theme.of(context).colorScheme.primary;
           final reveal = CurvedAnimation(
             parent: animation,
             curve: Curves.easeInOutCubic,
-            reverseCurve: Curves.easeInOutCubic,
+            // Closing is a quick swoop back into the gear.
+            reverseCurve: Curves.easeInCubic,
           );
-          // The page starts a little oversized and settles as the circle
-          // opens, so it reads as coming into focus. It stays opaque: fading
-          // it would let Home show through.
+          // Opening: the page starts a little oversized and settles as the
+          // circle opens. It stays opaque (fading would let Home show
+          // through) and holds still while closing.
           final settle = Tween<double>(begin: 1.05, end: 1).animate(
             CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
           );
@@ -33,7 +34,12 @@ class RevealRoute<T> extends PageRouteBuilder<T> {
               children: [
                 ClipPath(
                   clipper: _CircleReveal(origin, reveal.value),
-                  child: ScaleTransition(scale: settle, child: child),
+                  child: ScaleTransition(
+                    scale: animation.status == AnimationStatus.reverse
+                        ? const AlwaysStoppedAnimation(1.0)
+                        : settle,
+                    child: child,
+                  ),
                 ),
                 IgnorePointer(
                   child: CustomPaint(
@@ -91,8 +97,8 @@ class _RingPainter extends CustomPainter {
       _coverRadius(origin, size) * t,
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 3 + 5 * fade
-        ..color = color.withAlpha((200 * fade).round()),
+        ..strokeWidth = 2 + 3 * fade
+        ..color = color.withAlpha((170 * fade).round()),
     );
   }
 
