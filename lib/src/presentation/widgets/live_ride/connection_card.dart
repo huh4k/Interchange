@@ -80,7 +80,7 @@ class ConnectionCard extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Text(
-                'Plat ${conn.platform}',
+                conn.platform == 'TBD' ? 'Plat TBC' : 'Plat ${conn.platform}',
                 style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
               ),
             ],
@@ -107,7 +107,7 @@ class ConnectionCard extends StatelessWidget {
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      'Next: ${formatClockTime(conn.subsequentConnectingDeparture!)} (Plat ${conn.subsequentPlatform})',
+                      'Next: ${formatClockTime(conn.subsequentConnectingDeparture!)} (Plat ${conn.subsequentPlatform == null || conn.subsequentPlatform == 'TBD' ? 'TBC' : conn.subsequentPlatform})',
                       style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,

@@ -1,14 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../domain/entities/service.dart';
 import '../../domain/entities/trips.dart';
 import '../../domain/entities/station.dart';
+import '../../domain/value_objects/transit_type.dart';
 import '../../services/ptv_rt_service.dart';
 import '../../services/connection_service.dart';
 import '../../theme/app_theme.dart';
 import '../state/transit_view_model.dart';
 import 'common/ui_kit.dart';
 import 'live_ride_sheet.dart';
+import 'platform_hero.dart';
 
 class TripDetailsSheet extends StatefulWidget {
   final Trip trip;
@@ -68,10 +72,90 @@ class _TripDetailsSheetState extends State<TripDetailsSheet> {
   List<Map<String, dynamic>> _stopsSequence = [];
   List<ServiceStop> _serviceStops = [];
 
+  /// Platform at the selected station, resolved from the run's pattern (or a
+  /// departures lookup) when the departures list had none.
+  String _resolvedPlatform = '';
+  DateTime? _platformUpdatedAt;
+  bool _isRefreshingPlatform = false;
+  Timer? _platformTimer;
+
+  static const _platformPollInterval = Duration(seconds: 20);
+
+  bool get _isVline => widget.trip.departure?.type == TransitType.regionalTrain;
+
+  String get _platform => _resolvedPlatform.isNotEmpty
+      ? _resolvedPlatform
+      : (widget.trip.departure?.platform ?? '');
+
   @override
   void initState() {
     super.initState();
     _fetchPattern();
+    if (EnvService.isConfigured && widget.trip.tripId.isNotEmpty) {
+      _platformTimer = Timer.periodic(
+        _platformPollInterval,
+        (_) => _refreshPlatform(),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _platformTimer?.cancel();
+    super.dispose();
+  }
+
+  /// Re-reads the run's pattern (falling back to a departures lookup) so a
+  /// platform allocated or changed after the sheet opened shows up.
+  Future<void> _refreshPlatform() async {
+    if (_isRefreshingPlatform) return;
+    _isRefreshingPlatform = true;
+    try {
+      final runRef = widget.trip.tripId;
+      final routeType = widget.trip.departure?.type.value ?? 0;
+
+      final stops = await _ptvService.fetchPatternStops(
+        runRef,
+        routeType: routeType,
+      );
+      var platform = platformAtStation(stops, widget.selectedStation);
+
+      if (platform.isEmpty) {
+        final departures = await _ptvService.fetchDepartures(
+          widget.selectedStation.stopId,
+          station: widget.selectedStation,
+          routeType: routeType,
+        );
+        for (final t in departures) {
+          if (t.tripId == runRef) {
+            platform = t.departure?.platform ?? '';
+            break;
+          }
+        }
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _platformUpdatedAt = DateTime.now();
+        _resolvedPlatform = platform;
+        if (stops.isNotEmpty) _applyStops(stops);
+      });
+    } finally {
+      _isRefreshingPlatform = false;
+    }
+  }
+
+  void _applyStops(List<ServiceStop> serviceStops) {
+    _serviceStops = serviceStops;
+    _stopsSequence = serviceStops.map((s) {
+      return {
+        'station': s.station,
+        'name': s.station.name,
+        'time': s.departureTime ?? s.arrivalTime,
+        'platform': s.platform ?? '',
+        'sequence': s.stopSequence,
+      };
+    }).toList();
   }
 
   Future<void> _fetchPattern() async {
@@ -86,19 +170,11 @@ class _TripDetailsSheetState extends State<TripDetailsSheet> {
       );
 
       if (serviceStops.isNotEmpty && mounted) {
-        final List<Map<String, dynamic>> seq = serviceStops.map((s) {
-          return {
-            'station': s.station,
-            'name': s.station.name,
-            'time': s.departureTime ?? s.arrivalTime,
-            'platform': s.platform ?? '',
-            'sequence': s.stopSequence,
-          };
-        }).toList();
-
         setState(() {
-          _serviceStops = serviceStops;
-          _stopsSequence = seq;
+          _applyStops(serviceStops);
+          _resolvedPlatform =
+              platformAtStation(serviceStops, widget.selectedStation);
+          _platformUpdatedAt = DateTime.now();
           _isLoading = false;
         });
         return;
@@ -202,7 +278,7 @@ class _TripDetailsSheetState extends State<TripDetailsSheet> {
     final timeStr = scheduledTime != null
         ? '${scheduledTime.hour.toString().padLeft(2, '0')}:${scheduledTime.minute.toString().padLeft(2, '0')}'
         : '';
-    final platform = departure?.platform.isNotEmpty == true ? ' • Plat ${departure!.platform}' : '';
+    final platform = _platform.isNotEmpty ? ' • Plat $_platform' : '';
     final status = departure?.status.label ?? 'On Time';
     final stopCount = _displayStopsSequence.isNotEmpty ? '${_displayStopsSequence.length} stops' : '';
 
@@ -301,6 +377,16 @@ class _TripDetailsSheetState extends State<TripDetailsSheet> {
           ),
           const SizedBox(height: 18),
 
+          if (_isVline) ...[
+            PlatformHero(
+              platform: _platform,
+              color: badgeColor,
+              checking: _isLoading || _isRefreshingPlatform,
+              updatedAt: _platformUpdatedAt,
+            ),
+            const SizedBox(height: 12),
+          ],
+
           // Quick Summary (Departure, Platform, Status)
           SurfacePanel(
             padding: const EdgeInsets.symmetric(vertical: 14),
@@ -314,15 +400,19 @@ class _TripDetailsSheetState extends State<TripDetailsSheet> {
                     color: Theme.of(context).colorScheme.primary,
                   ),
                   VerticalDivider(width: 1, color: scheme.outlineVariant),
-                  _buildDetailItem(
-                    icon: Icons.signpost_rounded,
-                    label: 'Platform',
-                    value: departure?.platform.isNotEmpty == true
-                        ? 'Plat ${departure!.platform}'
-                        : 'TBA',
-                    color: scheme.onSurfaceVariant,
-                  ),
-                  VerticalDivider(width: 1, color: scheme.outlineVariant),
+                  // V/Line shows the platform in the hero above; trams and
+                  // buses have stops, not platforms.
+                  if (!_isVline &&
+                      (_platform.isNotEmpty ||
+                          departure?.type == TransitType.metro)) ...[
+                    _buildDetailItem(
+                      icon: Icons.signpost_rounded,
+                      label: 'Platform',
+                      value: _platform.isNotEmpty ? 'Plat $_platform' : 'TBA',
+                      color: scheme.onSurfaceVariant,
+                    ),
+                    VerticalDivider(width: 1, color: scheme.outlineVariant),
+                  ],
                   _buildDetailItem(
                     icon: Icons.check_circle_outline_rounded,
                     label: 'Status',
