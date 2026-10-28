@@ -62,3 +62,4 @@ app.*.map.json
 build_ipa.sh
 install_apk.sh
 android/build/
+/.wrangler
