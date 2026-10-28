@@ -38,8 +38,9 @@ void main() {
     expect(find.byIcon(Icons.subway_rounded), findsNothing);
   });
 
-  testWidgets('AppHeaderWidget renders theme toggle button and responds to tap', (tester) async {
-    bool toggled = false;
+  testWidgets('AppHeaderWidget has settings and refresh, but no theme toggle',
+      (tester) async {
+    var opened = false;
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -47,18 +48,18 @@ void main() {
             isLoading: false,
             activeMode: PtvMode.metroTrain,
             onRefresh: () {},
-            onToggleTheme: () => toggled = true,
+            onOpenSettings: () => opened = true,
           ),
         ),
       ),
     );
 
     expect(find.byTooltip('Switch to Light Mode'), findsNothing);
-    expect(find.byTooltip('Switch to Dark Mode'), findsOneWidget);
+    expect(find.byTooltip('Switch to Dark Mode'), findsNothing);
+    expect(find.byTooltip('Refresh Feed'), findsOneWidget);
 
-    await tester.tap(find.byTooltip('Switch to Dark Mode'));
+    await tester.tap(find.byTooltip('Settings'));
     await tester.pump();
-
-    expect(toggled, isTrue);
+    expect(opened, isTrue);
   });
 }

@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import '../../data/repositories/gtfs_repository.dart';
 import '../../theme/app_theme.dart';
 import '../state/transit_view_model.dart';
-import '../state/theme_view_model.dart';
 import '../widgets/active_ride_mini_player.dart';
 import '../widgets/alert_banner_widget.dart';
 import '../widgets/app_header_widget.dart';
@@ -635,16 +634,6 @@ class _HeaderSection extends StatelessWidget {
           onOpenSettings: () => Navigator.of(context).push(
             MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
           ),
-          onToggleTheme: () {
-            try {
-              final themeVm = Provider.of<ThemeViewModel>(
-                context,
-                listen: false,
-              );
-              final isDark = theme.brightness == Brightness.dark;
-              themeVm.setThemeMode(isDark ? ThemeMode.light : ThemeMode.dark);
-            } catch (_) {}
-          },
         ),
         if (isLoading) ...[
           const SizedBox(height: 12),

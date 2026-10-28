@@ -11,7 +11,6 @@ class AppHeaderWidget extends StatelessWidget {
   final PtvMode activeMode;
   final bool isOffline;
   final VoidCallback onRefresh;
-  final VoidCallback? onToggleTheme;
   final VoidCallback? onOpenSettings;
 
   const AppHeaderWidget({
@@ -23,7 +22,6 @@ class AppHeaderWidget extends StatelessWidget {
     this.activeMode = PtvMode.metroTrain,
     this.isOffline = false,
     required this.onRefresh,
-    this.onToggleTheme,
     this.onOpenSettings,
   });
 
@@ -31,7 +29,6 @@ class AppHeaderWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
     final brand = activeMode.transitType.ptvBrandColor;
     final hsl = HSLColor.fromColor(brand);
     final brandLight = hsl
@@ -130,17 +127,6 @@ class AppHeaderWidget extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
-        if (onToggleTheme != null) ...[
-          _HeaderButton(
-            onPressed: onToggleTheme,
-            tooltip: isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode',
-            child: Icon(
-              isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 8),
-        ],
         if (onOpenSettings != null) ...[
           _HeaderButton(
             onPressed: onOpenSettings,
