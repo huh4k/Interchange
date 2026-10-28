@@ -12,7 +12,6 @@ import '../../theme/app_theme.dart';
 import '../state/transit_view_model.dart';
 import 'common/ui_kit.dart';
 import 'live_ride_sheet.dart';
-import 'platform_hero.dart';
 
 class TripDetailsSheet extends StatefulWidget {
   final Trip trip;
@@ -75,7 +74,6 @@ class _TripDetailsSheetState extends State<TripDetailsSheet> {
   /// Platform at the selected station, resolved from the run's pattern (or a
   /// departures lookup) when the departures list had none.
   String _resolvedPlatform = '';
-  DateTime? _platformUpdatedAt;
   bool _isRefreshingPlatform = false;
   Timer? _platformTimer;
 
@@ -83,15 +81,18 @@ class _TripDetailsSheetState extends State<TripDetailsSheet> {
 
   bool get _isVline => widget.trip.departure?.type == TransitType.regionalTrain;
 
-  String get _platform => _resolvedPlatform.isNotEmpty
-      ? _resolvedPlatform
-      : (widget.trip.departure?.platform ?? '');
+  /// V/Line platforms aren't in PTV's data, so none is ever shown for them.
+  String get _platform => _isVline
+      ? ''
+      : (_resolvedPlatform.isNotEmpty
+          ? _resolvedPlatform
+          : (widget.trip.departure?.platform ?? ''));
 
   @override
   void initState() {
     super.initState();
     _fetchPattern();
-    if (EnvService.isConfigured && widget.trip.tripId.isNotEmpty) {
+    if (!_isVline && EnvService.isConfigured && widget.trip.tripId.isNotEmpty) {
       _platformTimer = Timer.periodic(
         _platformPollInterval,
         (_) => _refreshPlatform(),
@@ -136,7 +137,6 @@ class _TripDetailsSheetState extends State<TripDetailsSheet> {
 
       if (!mounted) return;
       setState(() {
-        _platformUpdatedAt = DateTime.now();
         _resolvedPlatform = platform;
         if (stops.isNotEmpty) _applyStops(stops);
       });
@@ -174,7 +174,6 @@ class _TripDetailsSheetState extends State<TripDetailsSheet> {
           _applyStops(serviceStops);
           _resolvedPlatform =
               platformAtStation(serviceStops, widget.selectedStation);
-          _platformUpdatedAt = DateTime.now();
           _isLoading = false;
         });
         return;
@@ -378,11 +377,24 @@ class _TripDetailsSheetState extends State<TripDetailsSheet> {
           const SizedBox(height: 18),
 
           if (_isVline) ...[
-            PlatformHero(
-              platform: _platform,
-              color: badgeColor,
-              checking: _isLoading || _isRefreshingPlatform,
-              updatedAt: _platformUpdatedAt,
+            SurfacePanel(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                children: [
+                  Icon(Icons.signpost_rounded,
+                      size: 20, color: scheme.onSurfaceVariant),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Platform information is not available for V/Line services.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 12),
           ],
@@ -400,8 +412,8 @@ class _TripDetailsSheetState extends State<TripDetailsSheet> {
                     color: Theme.of(context).colorScheme.primary,
                   ),
                   VerticalDivider(width: 1, color: scheme.outlineVariant),
-                  // V/Line shows the platform in the hero above; trams and
-                  // buses have stops, not platforms.
+                  // V/Line has no platform data; trams and buses have stops,
+                  // not platforms.
                   if (!_isVline &&
                       (_platform.isNotEmpty ||
                           departure?.type == TransitType.metro)) ...[
@@ -569,7 +581,7 @@ class _TripDetailsSheetState extends State<TripDetailsSheet> {
                 final tStr = t != null
                     ? '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}'
                     : '';
-                final plat = stop['platform']?.toString() ?? '';
+                final plat = _isVline ? '' : (stop['platform']?.toString() ?? '');
                 final platStr = plat.isNotEmpty ? ' • Plat $plat' : '';
 
                 final sub = isFirst

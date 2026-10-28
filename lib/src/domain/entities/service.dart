@@ -98,3 +98,16 @@ class Service {
     );
   }
 }
+
+/// The platform [station] is served from on this run, or '' when the run's
+/// stop list has no platform for it. Matches by stop id, id, then name.
+String platformAtStation(List<ServiceStop> stops, Station station) {
+  for (final s in stops) {
+    final st = s.station;
+    final matches = (station.stopId.isNotEmpty && st.stopId == station.stopId) ||
+        (station.id.isNotEmpty && st.id == station.id) ||
+        st.normalizedName == station.normalizedName;
+    if (matches) return s.platform ?? '';
+  }
+  return '';
+}

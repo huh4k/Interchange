@@ -4,7 +4,6 @@ import 'package:interchange/src/domain/entities/service.dart';
 import 'package:interchange/src/domain/entities/station.dart';
 import 'package:interchange/src/domain/entities/trips.dart';
 import 'package:interchange/src/domain/value_objects/transit_type.dart';
-import 'package:interchange/src/presentation/widgets/platform_hero.dart';
 import 'package:interchange/src/presentation/widgets/trip_details_sheet.dart';
 import 'package:interchange/src/services/ptv_rt_service.dart';
 
@@ -51,28 +50,6 @@ void main() {
     });
   });
 
-  group('PlatformHero', () {
-    Future<void> pump(WidgetTester tester, Widget w) => tester.pumpWidget(
-          MaterialApp(home: Scaffold(body: w)),
-        );
-
-    testWidgets('shows the platform number with semantics', (tester) async {
-      await pump(tester, const PlatformHero(platform: '3', color: Colors.purple));
-      expect(find.text('3'), findsOneWidget);
-      expect(find.text('Platform 3'), findsOneWidget);
-      expect(find.bySemanticsLabel('Platform 3'), findsOneWidget);
-    });
-
-    testWidgets('shows not-yet-allocated when unknown', (tester) async {
-      await pump(
-        tester,
-        const PlatformHero(platform: '', color: Colors.purple, checking: true),
-      );
-      expect(find.text('Not yet allocated'), findsOneWidget);
-      expect(find.text('Checking for updates…'), findsOneWidget);
-    });
-  });
-
   group('TripDetailsSheet platform', () {
     final geelong = _station('1002', 'Geelong Station');
     final southern = _station('1181', 'Southern Cross Station');
@@ -108,17 +85,19 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('V/Line shows the hero and no duplicate platform tile',
+    testWidgets('V/Line says platform info is unavailable, never TBA',
         (tester) async {
-      await open(tester, trip(TransitType.regionalTrain, platform: '4'));
-      expect(find.byType(PlatformHero), findsOneWidget);
-      expect(find.text('Platform 4'), findsOneWidget);
-      expect(find.text('Plat 4'), findsNothing);
+      await open(tester, trip(TransitType.regionalTrain));
+      expect(
+        find.text('Platform information is not available for V/Line services.'),
+        findsOneWidget,
+      );
+      expect(find.text('TBA'), findsNothing);
+      expect(find.textContaining('Plat '), findsNothing);
     });
 
     testWidgets('metro keeps the compact tile', (tester) async {
       await open(tester, trip(TransitType.metro, platform: '2'));
-      expect(find.byType(PlatformHero), findsNothing);
       expect(find.text('Plat 2'), findsOneWidget);
     });
 
@@ -129,7 +108,6 @@ void main() {
 
     testWidgets('tram with no platform hides the tile', (tester) async {
       await open(tester, trip(TransitType.tram));
-      expect(find.byType(PlatformHero), findsNothing);
       expect(find.text('Platform'), findsNothing);
       expect(find.text('TBA'), findsNothing);
     });
