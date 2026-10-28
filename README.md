@@ -84,7 +84,7 @@ No shipped build holds the PTV key. Requests go to a signing proxy, the Cloudfla
 
 | Build | Where requests go |
 |---|---|
-| Web (`interchange.huh4k.dev`) | Its own origin, `/api/ptv` |
+| Web (`interchange.huh4k.dev`, `beta.interchange.huh4k.dev`) | Its own origin, `/api/ptv` |
 | Android, iOS, desktop release builds | `https://interchange.huh4k.dev/api/ptv`, or your own via `--dart-define=PTV_PROXY_URL=...` |
 | Debug runs with a `.env` key | Signed locally, straight to PTV |
 

@@ -14,7 +14,10 @@
 
 const PTV_ORIGIN = 'https://timetableapi.ptv.vic.gov.au';
 const PREFIX = '/api/ptv';
-const SITE_ORIGIN = 'https://interchange.huh4k.dev';
+const SITE_ORIGINS = [
+  'https://interchange.huh4k.dev',
+  'https://beta.interchange.huh4k.dev',
+];
 
 async function sign(key, message) {
   const k = await crypto.subtle.importKey(
@@ -47,7 +50,13 @@ function isTrusted(request, env) {
   // Browsers set these themselves; other sites can't forge them from a page.
   const site = request.headers.get('Sec-Fetch-Site');
   const from = request.headers.get('Origin') ?? request.headers.get('Referer') ?? '';
-  return site === 'same-origin' && (from === '' || from.startsWith(SITE_ORIGIN));
+  if (site !== 'same-origin') return false;
+  if (from === '') return true;
+  try {
+    return SITE_ORIGINS.includes(new URL(from).origin);
+  } catch {
+    return false;
+  }
 }
 
 export async function onRequestGet({ request, env }) {
