@@ -42,6 +42,18 @@ void main() {
       expect(GtfsIndexEngine.isReplacementBusStop('Southern Cross Station'), isFalse);
     });
 
+    test('Bus stops stay separate and keep the road, dropping the suburb', () {
+      const csv = 'stop_id,stop_name,stop_lat,stop_lon,stop_url,parent_station\n'
+          'b1,Huntingdale Station/Haughton Rd (Oakleigh),-37.9,145.1,https://ptv.vic.gov.au/stop/22345/,\n'
+          'b2,Huntingdale Station/Huntingdale Rd (Oakleigh),-37.9,145.1,https://ptv.vic.gov.au/stop/22346/,\n';
+      final stops = MelbourneGtfsService.parseStopsTxt(csv, mode: PtvMode.metroBus);
+      expect(stops.map((s) => s.name), containsAll([
+        'Huntingdale Station/Haughton Rd',
+        'Huntingdale Station/Huntingdale Rd',
+      ]));
+      expect(stops.map((s) => s.stopId).toSet(), {'22345', '22346'});
+    });
+
     test('Resolves PTV GTFS route types to domain modes correctly', () {
       expect(TransitRoute.fromGtfsRouteType(0), equals(TransitType.tram));
       expect(TransitRoute.fromGtfsRouteType(1), equals(TransitType.metro));

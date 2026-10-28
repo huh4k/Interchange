@@ -147,11 +147,11 @@ class MelbourneGtfsService {
           final rawStations = binCache.stops.values.toList();
           final uniqueByName = <String, Station>{};
           for (final s in rawStations) {
-            final cleanName = mode == PtvMode.metroTram
+            final cleanName = mode.isPerStop
                 ? s.name
                 : GtfsIndexEngine.normalizeStationName(s.name);
             if (GtfsIndexEngine.isReplacementBusStop(cleanName)) continue;
-            final key = mode == PtvMode.metroTram ? s.stopId : cleanName.toLowerCase();
+            final key = mode.isPerStop ? s.stopId : cleanName.toLowerCase();
             // Prefer the row with a numeric PTV stop id: parent-station rows
             // carry a non-numeric one that departures can't be requested for.
             final existing = uniqueByName[key];
@@ -293,7 +293,11 @@ class MelbourneGtfsService {
     final hasLocalCache = targetFile != null && await targetFile.exists();
 
     final httpClient = client ?? http.Client();
-    final modeLabel = mode == PtvMode.metroTram ? 'Tram' : 'Metro';
+    final modeLabel = switch (mode) {
+      PtvMode.metroTram => 'Tram',
+      PtvMode.metroBus => 'Bus',
+      _ => 'Metro',
+    };
     onProgress?.call(0.05, 'Checking $modeLabel Stations Feed: 5%');
 
     final url = stopsUrlForMode(mode);
@@ -382,7 +386,11 @@ class MelbourneGtfsService {
 
       final contentLength = streamedResponse.contentLength ?? 0;
       int downloaded = 0;
-      final modeLabel = mode == PtvMode.metroTram ? 'Tram' : 'Metro';
+      final modeLabel = switch (mode) {
+      PtvMode.metroTram => 'Tram',
+      PtvMode.metroBus => 'Bus',
+      _ => 'Metro',
+    };
 
       await for (final chunk in streamedResponse.stream.timeout(idleTimeout)) {
         sink?.add(chunk);
@@ -515,12 +523,12 @@ class MelbourneGtfsService {
           ? cols[parentStationIdx].trim()
           : '';
 
-      final parentKey = mode == PtvMode.metroTram
+      final parentKey = mode.isPerStop
           ? (ptvStopId.isNotEmpty ? ptvStopId : rawStopId)
           : (parentStationVal.isNotEmpty ? parentStationVal : cleanName.toLowerCase());
 
       String code;
-      if (mode == PtvMode.metroTram) {
+      if (mode.isPerStop) {
         final stopNumberMatch = RegExp(r'#\s*(\d+[a-zA-Z]?)').firstMatch(cleanName);
         code = stopNumberMatch != null ? stopNumberMatch.group(1)! : ptvStopId;
       } else {
@@ -617,12 +625,12 @@ class MelbourneGtfsService {
           ? cols[parentStationIdx].trim()
           : '';
 
-      final parentKey = mode == PtvMode.metroTram
+      final parentKey = mode.isPerStop
           ? (ptvStopId.isNotEmpty ? ptvStopId : rawStopId)
           : (parentStationVal.isNotEmpty ? parentStationVal : cleanName.toLowerCase());
 
       String code;
-      if (mode == PtvMode.metroTram) {
+      if (mode.isPerStop) {
         final stopNumberMatch = RegExp(r'#\s*(\d+[a-zA-Z]?)').firstMatch(cleanName);
         code = stopNumberMatch != null ? stopNumberMatch.group(1)! : ptvStopId;
       } else {
@@ -686,6 +694,13 @@ class MelbourneGtfsService {
   }
 
   static String _normalizeStationName(String raw, {PtvMode mode = PtvMode.metroTrain}) {
+    if (mode == PtvMode.metroBus || mode == PtvMode.regionalBus) {
+      // Drop the trailing "(Suburb)", keep the road.
+      return raw
+          .replaceAll(RegExp(r'\s*\([^)]*\)\s*$'), '')
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
+    }
     if (mode == PtvMode.metroTram) {
       return raw.replaceAll(RegExp(r'\s+'), ' ').trim();
     }

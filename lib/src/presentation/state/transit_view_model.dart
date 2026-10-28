@@ -971,22 +971,34 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
       final Future<List<Trip>>? speculativeTrips =
           specId != null ? loadLiveTrips(requestedStation) : null;
 
-      final dynamicStops = stationsMode.isLiveOnly
-          ? <Station>[]
-          : canReuseStations
-          ? cachedStops
-          : await repository.getStopsForMode(
-              stationsMode,
-              onProgress: updateProgress,
-            );
+      List<Station> dynamicStops;
+      if (canReuseStations) {
+        dynamicStops = cachedStops;
+      } else if (stationsMode.isLiveOnly) {
+        // Static data may not be hosted (or may fail to load): carry on with
+        // live PTV search and departures alone.
+        try {
+          dynamicStops = await repository.getStopsForMode(
+            stationsMode,
+            onProgress: updateProgress,
+          );
+        } catch (_) {
+          dynamicStops = <Station>[];
+        }
+      } else {
+        dynamicStops = await repository.getStopsForMode(
+          stationsMode,
+          onProgress: updateProgress,
+        );
+      }
       if (!canReuseStations && dynamicStops.isNotEmpty) {
         _stationsByMode[stationsMode] = dynamicStops;
       }
 
-      final stationList = stationsMode.isLiveOnly
-          ? [if (requestedStation.stopId.isNotEmpty) requestedStation]
-          : dynamicStops.isNotEmpty
+      final stationList = dynamicStops.isNotEmpty
           ? dynamicStops
+          : stationsMode.isLiveOnly
+          ? [if (requestedStation.stopId.isNotEmpty) requestedStation]
           : [MelbourneGtfsService.defaultStationForMode(stationsMode)];
 
       final reqNameClean = requestedStation.normalizedName;
@@ -1026,8 +1038,8 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
       var fromStaticFallback = false;
       if (livePtvTrips.isNotEmpty) {
         mergedTrips = livePtvTrips;
-      } else if (_activeMode.isLiveOnly) {
-        // No static timetable exists for this mode.
+      } else if (_activeMode.isLiveOnly && currentSelected.stopId.isEmpty) {
+        // No stop chosen yet, so there is nothing to look up.
       } else {
         // Fallback to static GTFS scheduled trips only if live PTV API returned empty
         updateProgress(0.85, 'Loading Scheduled Timetable Fallback...');

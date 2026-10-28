@@ -112,7 +112,7 @@ Web deploys run from [`cloudflare.yml`](.github/workflows/cloudflare.yml) with a
 
 ## GTFS data
 
-The app doesn't download the 268 MB statewide PTV feed. Each mode (`metro`, `tram`, `vline`) uses two small files hosted on Cloudflare R2, at the base URL in [`gtfs_config.dart`](lib/src/core/gtfs_config.dart):
+The app doesn't download the 268 MB statewide PTV feed. Each mode (`metro`, `tram`, `vline`, `metroBus`) uses two small files hosted on Cloudflare R2, at the base URL in [`gtfs_config.dart`](lib/src/core/gtfs_config.dart):
 
 | File | Used for |
 |---|---|
@@ -131,7 +131,9 @@ The app doesn't download the 268 MB statewide PTV feed. Each mode (`metro`, `tra
    python3 tool/build_gtfs_r2.py path/to/gtfs.zip out_dir
    ```
 
-3. Upload the contents of `out_dir` to the R2 bucket at the base URL's path, keeping the `metro/`, `tram/` and `vline/` folders.
+3. Upload the contents of `out_dir` to the R2 bucket at the base URL's path, keeping the `metro/`, `tram/`, `vline/` and `metroBus/` folders.
+
+   The metro bus feed is by far the largest, so the script trims it to services running in the next three weeks and to the columns the app reads. Re-publish at least that often. Until `metroBus` is uploaded the app still works for buses from live PTV data alone, without the scheduled fallback.
 
 </details>
 

@@ -11,9 +11,16 @@ enum PtvMode {
   final String id;
   const PtvMode(this.id);
 
-  /// Modes with no static GTFS hosted: stops and departures come from the
-  /// PTV API only.
+  /// Bus can run without static GTFS (not hosted yet, or failed to load):
+  /// stops and departures then come from the PTV API only.
   bool get isLiveOnly => this == PtvMode.metroBus;
+
+  /// Modes whose GTFS stops are individual kerbside stops (full names, keyed
+  /// by PTV stop id) rather than stations grouped by parent.
+  bool get isPerStop =>
+      this == PtvMode.metroTram ||
+      this == PtvMode.metroBus ||
+      this == PtvMode.regionalBus;
 
   /// Name of this mode's static GTFS files on the data host (see `gtfs_config.dart`).
   String get gtfsKey {

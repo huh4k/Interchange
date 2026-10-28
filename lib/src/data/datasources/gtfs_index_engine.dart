@@ -52,6 +52,8 @@ class GtfsIndexEngine {
         lower.contains('bustech');
   }
 
+  static final _trailingParensRegex = RegExp(r'\s*\([^)]*\)\s*$');
+
   static String normalizeStationName(String rawName) {
     if (rawName.isEmpty) return 'Station';
 
@@ -317,7 +319,10 @@ class GtfsIndexEngine {
     }
 
     // Detect tram mode from directory path
-    final isTramMode = modeDir.path.contains('/tram') || modeDir.path.contains('\\tram');
+    final isTramMode = modeDir.path.contains('/tram') ||
+        modeDir.path.contains('\\tram') ||
+        modeDir.path.contains('/metroBus') ||
+        modeDir.path.contains('\\metroBus');
     return runHeavy(
       content.length,
       () => _parseStopsContent(content, isTramMode: isTramMode),
@@ -376,6 +381,8 @@ class GtfsIndexEngine {
       String code;
       if (isTramMode) {
         cleanName = rawStopName.replaceAll(_whitespaceRegex, ' ').trim();
+        // Bus names end in "(Suburb)"; the road before it identifies the stop.
+        cleanName = cleanName.replaceAll(_trailingParensRegex, '');
         final stopNumMatch = _stopCodeRegex.firstMatch(cleanName);
         code = stopNumMatch != null ? stopNumMatch.group(1)! : ptvStopId;
       } else {
