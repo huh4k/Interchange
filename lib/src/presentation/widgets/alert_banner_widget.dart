@@ -70,3 +70,45 @@ class AlertBannerWidget extends StatelessWidget {
     );
   }
 }
+
+/// Shown when departures come from the static timetable because no live
+/// data was available.
+class StaticFallbackBanner extends StatelessWidget {
+  const StaticFallbackBanner({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Semantics(
+      container: true,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 10, 14, 10),
+        decoration: BoxDecoration(
+          color: AppColors.statusAmber.withAlpha(28),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.statusAmber.withAlpha(90)),
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.schedule_rounded,
+              color: AppColors.statusAmber,
+              size: 20,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Live data unavailable. Showing the scheduled timetable, so times may not be accurate.',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  height: 1.35,
+                  color: theme.colorScheme.onSurface,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

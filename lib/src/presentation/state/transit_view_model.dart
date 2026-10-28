@@ -74,6 +74,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
   int _loadRequestId = 0;
   bool _isSilentRefreshing = false;
   bool _isOffline = false;
+  bool _usingStaticFallback = false;
 
   /// Data younger than this is not refetched when the app resumes.
   static const Duration _resumeRefreshThreshold = Duration(seconds: 15);
@@ -314,6 +315,10 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
 
   /// True when the last live departures request failed (no connection).
   bool get isOffline => _isOffline;
+
+  /// True when the departures shown come from the static timetable because
+  /// the live feed returned nothing, so times may be inaccurate.
+  bool get usingStaticFallback => _usingStaticFallback;
   double get loadingProgress => _loadingProgress;
   String get loadingStatus => _loadingStatus;
   int get loadingPercentage => (_loadingProgress * 100).clamp(0, 100).toInt();
@@ -536,6 +541,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     _selectedStation =
         _savedStationByMode[newMode] ?? MelbourneGtfsService.defaultStationForMode(newMode);
     _trips = [];
+    _usingStaticFallback = false;
     _searchQuery = '';
     notifyListeners();
     loadData(station: _selectedStation, reuseStations: true);
@@ -1017,6 +1023,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
       final oneHourFromNow = now.add(const Duration(hours: 1));
 
       List<Trip> mergedTrips = [];
+      var fromStaticFallback = false;
       if (livePtvTrips.isNotEmpty) {
         mergedTrips = livePtvTrips;
       } else if (_activeMode.isLiveOnly) {
@@ -1036,6 +1043,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
             return sched.isAfter(now.subtract(const Duration(minutes: 2))) &&
                    sched.isBefore(oneHourFromNow);
           }).toList();
+          fromStaticFallback = mergedTrips.isNotEmpty;
         } catch (_) {}
       }
 
@@ -1057,6 +1065,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
 
       if (requestId == _loadRequestId && !_isDisposed) {
         _trips = mergedTrips;
+        _usingStaticFallback = fromStaticFallback;
         _stations = stationList;
         _selectedStation = currentSelected;
         if (!isSilent) {

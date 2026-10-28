@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:interchange/src/presentation/widgets/alert_banner_widget.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:interchange/src/domain/entities/trips.dart';
 import 'package:interchange/src/domain/value_objects/ptv_mode.dart';
@@ -38,6 +39,7 @@ Trip _trip({
 );
 
 void main() {
+  staticFallbackBannerTests();
   group('AppHeaderWidget', () {
     testWidgets('narrow width + large text does not overflow', (tester) async {
       tester.view.physicalSize = const Size(320, 640);
@@ -237,5 +239,15 @@ void main() {
     await tester.pumpWidget(_wrap(const TripCardSkeleton()));
     await tester.pump(const Duration(milliseconds: 600));
     expect(tester.takeException(), isNull);
+  });
+}
+
+void staticFallbackBannerTests() {
+  testWidgets('StaticFallbackBanner warns times may be inaccurate',
+      (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: Scaffold(body: StaticFallbackBanner())),
+    );
+    expect(find.textContaining('may not be accurate'), findsOneWidget);
   });
 }

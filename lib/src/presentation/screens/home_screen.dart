@@ -253,6 +253,14 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
 
+          if (!isSavedView && viewModel.usingStaticFallback)
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20.0, vertical: 4.0),
+                child: StaticFallbackBanner(),
+              ),
+            ),
+
           // Saved View: Favorite Stations Section
           if (isSavedView && viewModel.favoriteStations.isNotEmpty) ...[
             SliverPadding(
