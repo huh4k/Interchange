@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:interchange/src/presentation/widgets/alert_banner_widget.dart';
+import 'package:interchange/src/presentation/widgets/transit_mode_slider.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:interchange/src/domain/entities/trips.dart';
 import 'package:interchange/src/domain/value_objects/ptv_mode.dart';
@@ -58,9 +59,67 @@ void main() {
         ),
       );
       expect(tester.takeException(), isNull);
+      // Too narrow for the name: only the logo is left, with no text to clip.
+      expect(find.text('Interchange'), findsNothing);
+      expect(find.byTooltip('Syncing… 42%'), findsOneWidget);
+    });
+
+    testWidgets('shows the name and status when there is room', (tester) async {
+      tester.view.physicalSize = const Size(800, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        _wrap(
+          AppHeaderWidget(
+            isLoading: true,
+            loadingPercentage: 42,
+            activeMode: PtvMode.metroTram,
+            onRefresh: () {},
+            onOpenSettings: () {},
+          ),
+        ),
+      );
+      expect(find.text('Interchange'), findsOneWidget);
       expect(find.text('Syncing… 42%'), findsOneWidget);
-      // Percentage appears once (no duplicate pill).
-      expect(find.textContaining('42%'), findsOneWidget);
+    });
+  });
+
+  group('TransitModeSlider', () {
+    Future<void> pumpAt(WidgetTester tester, double width) async {
+      tester.view.physicalSize = Size(width, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        _wrap(
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: TransitModeSlider(
+              activeMode: PtvMode.metroTrain,
+              onModeChanged: (_) {},
+              modes: const [
+                PtvMode.metroTrain,
+                PtvMode.metroTram,
+                PtvMode.regionalTrain,
+                PtvMode.metroBus,
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    testWidgets('shows labels when they fit', (tester) async {
+      await pumpAt(tester, 900); // tests use a wide fixed-width font
+      expect(find.text('Trains'), findsOneWidget);
+      expect(find.text('V/Line'), findsOneWidget);
+    });
+
+    testWidgets('falls back to icons when labels would be cut off',
+        (tester) async {
+      await pumpAt(tester, 300);
+      expect(tester.takeException(), isNull);
+      expect(find.text('Trains'), findsNothing);
+      expect(find.byIcon(Icons.directions_bus_rounded), findsOneWidget);
     });
   });
 

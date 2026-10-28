@@ -37,10 +37,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final download = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        icon: const Icon(
-          Icons.download_rounded,
-          color: AppColors.melbourneBus,
-        ),
+        icon: const Icon(Icons.download_rounded, color: AppColors.melbourneBus),
         title: const Text('Download bus timetable?'),
         content: const Text(
           'The metro bus timetable is much larger than the other modes and '
@@ -61,6 +58,29 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
     if (download == true) await viewModel.allowBusDataDownload();
+  }
+
+  /// Hint for the filter box. The station name goes in it when there is room;
+  /// otherwise the hint drops it rather than being cut off mid-word.
+  String _filterHint(
+    BuildContext context,
+    TransitViewModel vm,
+    bool isSavedView,
+    double width,
+  ) {
+    if (isSavedView) return 'Filter saved departures...';
+    final what = switch (vm.activeMode) {
+      PtvMode.metroTram => 'tram routes',
+      PtvMode.metroBus => 'bus routes',
+      PtvMode.regionalTrain => 'V/Line services',
+      _ => 'train lines',
+    };
+    final full = 'Filter $what at ${vm.selectedStation.name}...';
+    final style =
+        Theme.of(context).textTheme.bodyLarge ?? const TextStyle(fontSize: 16);
+    // Room beside the leading icon, the padding and the clear button.
+    final fits = measureTextWidth(context, full, style) < width - 100;
+    return fits ? full : 'Filter $what...';
   }
 
   @override
@@ -157,16 +177,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
                     // Mode Slider (Trains / Trams)
                     if (viewModel.enabledModes.length > 1)
-                    TransitModeSlider(
-                      modes: viewModel.enabledModes,
-                      activeMode: viewModel.activeMode,
-                      onModeChanged: (mode) {
-                        viewModel.switchBaseMode(mode);
-                        if (viewModel.needsBusDataConsent) {
-                          _askBusDataConsent(context, viewModel);
-                        }
-                      },
-                    ),
+                      TransitModeSlider(
+                        modes: viewModel.enabledModes,
+                        activeMode: viewModel.activeMode,
+                        onModeChanged: (mode) {
+                          viewModel.switchBaseMode(mode);
+                          if (viewModel.needsBusDataConsent) {
+                            _askBusDataConsent(context, viewModel);
+                          }
+                        },
+                      ),
                     const SizedBox(height: 8),
 
                     QuickStationStrip(viewModel: viewModel),
@@ -193,42 +213,41 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 10),
 
                   // Search departures/routes for the selected station
-                  TextField(
-                    controller: _searchController,
-                    onChanged: viewModel.updateSearchQuery,
-                    decoration: InputDecoration(
-                      isDense: true,
-                      hintText: isSavedView
-                          ? 'Filter saved departures...'
-                          : viewModel.activeMode == PtvMode.metroTram
-                          ? 'Filter tram routes at ${viewModel.selectedStation.name}...'
-                          : viewModel.activeMode == PtvMode.metroBus
-                          ? 'Filter bus routes at ${viewModel.selectedStation.name}...'
-                          : viewModel.activeMode == PtvMode.regionalTrain
-                          ? 'Filter V/Line services at ${viewModel.selectedStation.name}...'
-                          : 'Filter train lines at ${viewModel.selectedStation.name}...',
-                      prefixIcon: Icon(
-                        viewModel.activeMode == PtvMode.metroTram
-                            ? Icons.tram_rounded
-                            : viewModel.activeMode == PtvMode.metroBus
-                            ? Icons.directions_bus_rounded
-                            : Icons.search_rounded,
-                        color: viewModel.activeMode == PtvMode.metroTram
-                            ? AppColors.melbourneTram
-                            : viewModel.activeMode == PtvMode.metroBus
-                            ? AppColors.melbourneBus
+                  LayoutBuilder(
+                    builder: (context, box) => TextField(
+                      controller: _searchController,
+                      onChanged: viewModel.updateSearchQuery,
+                      decoration: InputDecoration(
+                        isDense: true,
+                        hintText: _filterHint(
+                          context,
+                          viewModel,
+                          isSavedView,
+                          box.maxWidth,
+                        ),
+                        prefixIcon: Icon(
+                          viewModel.activeMode == PtvMode.metroTram
+                              ? Icons.tram_rounded
+                              : viewModel.activeMode == PtvMode.metroBus
+                              ? Icons.directions_bus_rounded
+                              : Icons.search_rounded,
+                          color: viewModel.activeMode == PtvMode.metroTram
+                              ? AppColors.melbourneTram
+                              : viewModel.activeMode == PtvMode.metroBus
+                              ? AppColors.melbourneBus
+                              : null,
+                        ),
+                        suffixIcon: viewModel.searchQuery.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear_rounded),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  viewModel.updateSearchQuery('');
+                                },
+                                tooltip: 'Clear filter',
+                              )
                             : null,
                       ),
-                      suffixIcon: viewModel.searchQuery.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Icons.clear_rounded),
-                              onPressed: () {
-                                _searchController.clear();
-                                viewModel.updateSearchQuery('');
-                              },
-                              tooltip: 'Clear filter',
-                            )
-                          : null,
                     ),
                   ),
                 ],
@@ -426,7 +445,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 isSavedView: isSavedView,
                 filterText: viewModel.searchQuery,
                 hasError: viewModel.errorMessage != null,
-                noStopSelected: !isSavedView &&
+                noStopSelected:
+                    !isSavedView &&
                     viewModel.activeMode.isLiveOnly &&
                     viewModel.selectedStation.stopId.isEmpty,
                 onReset: isSavedView
@@ -562,7 +582,9 @@ class _SavedStationRow extends StatelessWidget {
     return SurfacePanel(
       margin: const EdgeInsets.only(bottom: 8),
       padding: EdgeInsets.fromLTRB(12, 10, trailing == null ? 14 : 4, 10),
-      borderColor: isSelected ? Theme.of(context).colorScheme.primary.withAlpha(140) : null,
+      borderColor: isSelected
+          ? Theme.of(context).colorScheme.primary.withAlpha(140)
+          : null,
       onTap: onTap,
       child: Row(
         children: [

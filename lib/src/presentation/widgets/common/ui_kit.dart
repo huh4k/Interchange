@@ -3,6 +3,20 @@ import 'package:flutter/material.dart';
 /// Small shared building blocks so screens and sheets look like one app.
 /// Colours come from the theme's colour scheme (see `AppTheme`).
 
+/// Rendered width of single-line [text], for deciding whether it fits before
+/// falling back to something shorter (an icon, say).
+double measureTextWidth(BuildContext context, String text, TextStyle style) {
+  final painter = TextPainter(
+    text: TextSpan(text: text, style: style),
+    maxLines: 1,
+    textDirection: TextDirection.ltr,
+    textScaler: MediaQuery.textScalerOf(context),
+  )..layout();
+  final width = painter.width;
+  painter.dispose();
+  return width;
+}
+
 /// Drag handle shown at the top of bottom sheets.
 class SheetHandle extends StatelessWidget {
   const SheetHandle({super.key});

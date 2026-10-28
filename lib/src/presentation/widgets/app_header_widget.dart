@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/app_info.dart';
 import '../../domain/value_objects/ptv_mode.dart';
 import '../../theme/app_theme.dart';
+import 'common/ui_kit.dart';
 
 class AppHeaderWidget extends StatelessWidget {
   final bool isLoading;
@@ -40,120 +41,169 @@ class AppHeaderWidget extends StatelessWidget {
     final statusColor = isLoading
         ? AppColors.statusAmber
         : isOffline
-            ? scheme.error
-            : AppColors.statusGreen;
+        ? scheme.error
+        : AppColors.statusGreen;
     final statusLabel = isLoading
         ? 'Syncing… $loadingPercentage%'
         : isOffline
-            ? 'Offline'
-            : 'Live';
+        ? 'Offline'
+        : 'Live';
 
-    return Row(
-      children: [
-        Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [brandLight, brandDark],
+    final buttons = 1 + (onOpenSettings != null ? 1 : 0);
+    final titleStyle = theme.textTheme.titleLarge?.copyWith(fontSize: 21);
+    const versionStyle = TextStyle(fontSize: 11, fontWeight: FontWeight.w600);
+    final titleWidth =
+        measureTextWidth(
+          context,
+          'Interchange',
+          titleStyle ?? const TextStyle(),
+        ) +
+        6 +
+        measureTextWidth(context, 'v$appVersion', versionStyle);
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Logo, gaps and the round buttons take their share first; if the name
+        // doesn't fit in what is left, only the logo is shown.
+        final room = constraints.maxWidth - 44 - 12 - buttons * (44 + 8);
+        final compact = room < titleWidth;
+        return Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [brandLight, brandDark],
+                ),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Stack(
+                clipBehavior: Clip.none,
+                alignment: Alignment.center,
+                children: [
+                  Icon(
+                    activeMode.transitType.icon,
+                    color: Colors.white,
+                    size: 24,
+                  ),
+                  // Without the status line, a dot on the logo still shows it.
+                  if (compact)
+                    Positioned(
+                      right: -2,
+                      top: -2,
+                      child: Tooltip(
+                        message: statusLabel,
+                        child: Container(
+                          width: 12,
+                          height: 12,
+                          decoration: BoxDecoration(
+                            color: statusColor,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: scheme.surface, width: 2),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: Icon(
-            activeMode.transitType.icon,
-            color: Colors.white,
-            size: 24,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
-                children: [
-                  Flexible(
-                    child: Text(
-                      'Interchange',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleLarge?.copyWith(fontSize: 21),
+            const SizedBox(width: 12),
+            if (compact)
+              const Spacer()
+            else
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            'Interchange',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              fontSize: 21,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'v$appVersion',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    'v$appVersion',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: scheme.onSurfaceVariant,
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Container(
+                          width: 7,
+                          height: 7,
+                          decoration: BoxDecoration(
+                            color: statusColor,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            statusLabel,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: isLoading || isOffline
+                                  ? statusColor
+                                  : scheme.onSurfaceVariant,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-              const SizedBox(height: 2),
-              Row(
-                children: [
-                  Container(
-                    width: 7,
-                    height: 7,
-                    decoration: BoxDecoration(
-                      color: statusColor,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Flexible(
-                    child: Text(
-                      statusLabel,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: isLoading || isOffline
-                            ? statusColor
-                            : scheme.onSurfaceVariant,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
+            const SizedBox(width: 8),
+            if (onOpenSettings != null) ...[
+              _HeaderButton(
+                onPressed: onOpenSettings,
+                tooltip: 'Settings',
+                child: const Icon(Icons.settings_rounded, size: 20),
               ),
+              const SizedBox(width: 8),
             ],
-          ),
-        ),
-        const SizedBox(width: 8),
-        if (onOpenSettings != null) ...[
-          _HeaderButton(
-            onPressed: onOpenSettings,
-            tooltip: 'Settings',
-            child: const Icon(Icons.settings_rounded, size: 20),
-          ),
-          const SizedBox(width: 8),
-        ],
-        _HeaderButton(
-          onPressed: isLoading ? null : onRefresh,
-          tooltip: 'Refresh Feed',
-          child: isLoading
-              ? RepaintBoundary(
-                  child: SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.2,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        Theme.of(context).colorScheme.primary,
+            _HeaderButton(
+              onPressed: isLoading ? null : onRefresh,
+              tooltip: 'Refresh Feed',
+              child: isLoading
+                  ? RepaintBoundary(
+                      child: SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.2,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                )
-              : const Icon(Icons.refresh_rounded, size: 21),
-        ),
-      ],
+                    )
+                  : const Icon(Icons.refresh_rounded, size: 21),
+            ),
+          ],
+        );
+      },
     );
   }
 }
