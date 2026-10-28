@@ -440,6 +440,33 @@ void main() {
       );
     });
 
+    test('modes can be switched off, but one always stays on', () async {
+      await viewModel.initFuture;
+      await viewModel.setModeEnabled(PtvMode.metroBus, false);
+      await viewModel.setModeEnabled(PtvMode.regionalTrain, false);
+      expect(viewModel.enabledModes, [PtvMode.metroTrain, PtvMode.metroTram]);
+      // Switching off the active mode hands over to the next one.
+      await viewModel.setModeEnabled(PtvMode.metroTrain, false);
+      expect(viewModel.activeMode, PtvMode.metroTram);
+      await viewModel.setModeEnabled(PtvMode.metroTram, false);
+      expect(viewModel.enabledModes, [PtvMode.metroTram]);
+      expect(
+        (await SharedPreferences.getInstance()).getStringList('enabled_modes'),
+        ['metroTram'],
+      );
+    });
+
+    test('banner switches default on and persist', () async {
+      await viewModel.initFuture;
+      expect(viewModel.showAlertBanner, isTrue);
+      expect(viewModel.showStaticWarning, isTrue);
+      await viewModel.setShowAlertBanner(false);
+      await viewModel.setShowStaticWarning(false);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool('show_alert_banner'), isFalse);
+      expect(prefs.getBool('show_static_warning'), isFalse);
+    });
+
     test('favorite toggle notifies before persisting completes', () async {
       var notified = 0;
       viewModel.addListener(() => notified++);
@@ -1108,3 +1135,6 @@ void main() {
     });
   });
 }
+
+/// Shared with settings_screen_test.dart.
+typedef MockRepositoryForSettings = _MockRepository;

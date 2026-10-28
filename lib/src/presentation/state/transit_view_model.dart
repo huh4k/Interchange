@@ -78,6 +78,17 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
   bool _usingStaticFallback = false;
   bool _busDataConsent = false;
 
+  /// Modes offered in the mode slider; the user can switch the rest off.
+  static const List<PtvMode> selectableModes = [
+    PtvMode.metroTrain,
+    PtvMode.metroTram,
+    PtvMode.regionalTrain,
+    PtvMode.metroBus,
+  ];
+  List<PtvMode> _enabledModes = selectableModes;
+  bool _showAlertBanner = true;
+  bool _showStaticWarning = true;
+
   /// Data younger than this is not refetched when the app resumes.
   static const Duration _resumeRefreshThreshold = Duration(seconds: 15);
   final DateTime Function() _clock;
@@ -144,6 +155,19 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
     }
     _walkTimeEnabled = await _settings.getWalkTimeEnabled();
     _busDataConsent = await _settings.getBusDataConsent();
+    final storedModes = await _settings.getEnabledModes();
+    if (storedModes != null) {
+      final modes = [
+        for (final m in selectableModes)
+          if (storedModes.contains(m.name)) m,
+      ];
+      if (modes.isNotEmpty) _enabledModes = modes;
+    }
+    _showAlertBanner = await _settings.getShowAlertBanner();
+    _showStaticWarning = await _settings.getShowStaticWarning();
+    if (!_enabledModes.contains(_activeMode)) {
+      switchBaseMode(_enabledModes.first);
+    }
     notifyListeners();
   }
 
@@ -318,6 +342,39 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
 
   /// True when the last live departures request failed (no connection).
   bool get isOffline => _isOffline;
+
+  List<PtvMode> get enabledModes => _enabledModes;
+  bool get showAlertBanner => _showAlertBanner;
+  bool get showStaticWarning => _showStaticWarning;
+
+  /// Switches a transport mode on or off. At least one always stays on; if the
+  /// active mode is switched off the first remaining one takes over.
+  Future<void> setModeEnabled(PtvMode mode, bool enabled) async {
+    final next = [
+      for (final m in selectableModes)
+        if (m == mode ? enabled : _enabledModes.contains(m)) m,
+    ];
+    if (next.isEmpty || !selectableModes.contains(mode)) return;
+    _enabledModes = next;
+    if (!next.contains(_activeMode)) {
+      switchBaseMode(next.first);
+    } else {
+      notifyListeners();
+    }
+    await _settings.setEnabledModes([for (final m in next) m.name]);
+  }
+
+  Future<void> setShowAlertBanner(bool show) async {
+    _showAlertBanner = show;
+    notifyListeners();
+    await _settings.setShowAlertBanner(show);
+  }
+
+  Future<void> setShowStaticWarning(bool show) async {
+    _showStaticWarning = show;
+    notifyListeners();
+    await _settings.setShowStaticWarning(show);
+  }
 
   /// Static bus data is large, so it is only downloaded once the user agrees.
   /// On web nothing is cached to disk, so there is no big download to warn of.

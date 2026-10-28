@@ -6,6 +6,9 @@ class SettingsService {
   static const _themeModeKey = 'theme_mode';
   static const _walkTimeKey = 'walk_time_enabled';
   static const _busDataKey = 'bus_data_consent';
+  static const _enabledModesKey = 'enabled_modes';
+  static const _alertBannerKey = 'show_alert_banner';
+  static const _staticWarningKey = 'show_static_warning';
 
   /// Whether walking time to the selected station is shown. Off by default so
   /// the app never asks for location unprompted.
@@ -28,6 +31,38 @@ class SettingsService {
   Future<void> setBusDataConsent(bool consent) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_busDataKey, consent);
+  }
+
+  /// Names of the transport modes the user has left switched on, or null
+  /// when they've never changed it (all on).
+  Future<List<String>?> getEnabledModes() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList(_enabledModesKey);
+  }
+
+  Future<void> setEnabledModes(List<String> modeNames) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_enabledModesKey, modeNames);
+  }
+
+  Future<bool> getShowAlertBanner() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_alertBannerKey) ?? true;
+  }
+
+  Future<void> setShowAlertBanner(bool show) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_alertBannerKey, show);
+  }
+
+  Future<bool> getShowStaticWarning() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_staticWarningKey) ?? true;
+  }
+
+  Future<void> setShowStaticWarning(bool show) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_staticWarningKey, show);
   }
 
   /// Reads the stored [ThemeMode]. Defaults to [ThemeMode.dark].

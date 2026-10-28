@@ -12,6 +12,7 @@ class AppHeaderWidget extends StatelessWidget {
   final bool isOffline;
   final VoidCallback onRefresh;
   final VoidCallback? onToggleTheme;
+  final VoidCallback? onOpenSettings;
 
   const AppHeaderWidget({
     super.key,
@@ -23,6 +24,7 @@ class AppHeaderWidget extends StatelessWidget {
     this.isOffline = false,
     required this.onRefresh,
     this.onToggleTheme,
+    this.onOpenSettings,
   });
 
   @override
@@ -136,6 +138,14 @@ class AppHeaderWidget extends StatelessWidget {
               isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
               size: 20,
             ),
+          ),
+          const SizedBox(width: 8),
+        ],
+        if (onOpenSettings != null) ...[
+          _HeaderButton(
+            onPressed: onOpenSettings,
+            tooltip: 'Settings',
+            child: const Icon(Icons.settings_rounded, size: 20),
           ),
           const SizedBox(width: 8),
         ],

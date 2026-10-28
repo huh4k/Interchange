@@ -17,6 +17,7 @@ import '../widgets/transit_mode_slider.dart';
 import '../widgets/trip_card_widget.dart';
 import '../widgets/trip_details_sheet.dart';
 import 'disruptions_screen.dart';
+import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -156,7 +157,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(height: 12),
 
                     // Mode Slider (Trains / Trams)
+                    if (viewModel.enabledModes.length > 1)
                     TransitModeSlider(
+                      modes: viewModel.enabledModes,
                       activeMode: viewModel.activeMode,
                       onModeChanged: (mode) {
                         viewModel.switchBaseMode(mode);
@@ -282,7 +285,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
 
-          if (viewModel.alerts.isNotEmpty)
+          if (viewModel.showAlertBanner && viewModel.alerts.isNotEmpty)
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.symmetric(
@@ -293,7 +296,9 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
 
-          if (!isSavedView && viewModel.usingStaticFallback)
+          if (!isSavedView &&
+              viewModel.showStaticWarning &&
+              viewModel.usingStaticFallback)
             const SliverToBoxAdapter(
               child: Padding(
                 padding: EdgeInsets.symmetric(horizontal: 20.0, vertical: 4.0),
@@ -627,6 +632,9 @@ class _HeaderSection extends StatelessWidget {
           activeMode: mode,
           isOffline: isOffline,
           onRefresh: viewModel.loadData,
+          onOpenSettings: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
+          ),
           onToggleTheme: () {
             try {
               final themeVm = Provider.of<ThemeViewModel>(
