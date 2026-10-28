@@ -48,7 +48,7 @@ void main() {
             isLoading: false,
             activeMode: PtvMode.metroTrain,
             onRefresh: () {},
-            onOpenSettings: () => opened = true,
+            onOpenSettings: (_) => opened = true,
           ),
         ),
       ),

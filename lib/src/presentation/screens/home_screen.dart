@@ -6,6 +6,7 @@ import '../state/transit_view_model.dart';
 import '../widgets/active_ride_mini_player.dart';
 import '../widgets/alert_banner_widget.dart';
 import '../widgets/app_header_widget.dart';
+import '../widgets/common/reveal_route.dart';
 import '../widgets/common/ui_kit.dart';
 import '../widgets/empty_state_widget.dart';
 import '../widgets/quick_station_strip.dart';
@@ -657,8 +658,11 @@ class _HeaderSection extends StatelessWidget {
           activeMode: mode,
           isOffline: isOffline,
           onRefresh: viewModel.loadData,
-          onOpenSettings: () => Navigator.of(context).push(
-            MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
+          onOpenSettings: (origin) => Navigator.of(context).push(
+            RevealRoute<void>(
+              builder: (_) => const SettingsScreen(),
+              origin: origin,
+            ),
           ),
         ),
         if (isLoading) ...[

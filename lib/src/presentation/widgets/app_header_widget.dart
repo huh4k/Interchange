@@ -12,7 +12,10 @@ class AppHeaderWidget extends StatelessWidget {
   final PtvMode activeMode;
   final bool isOffline;
   final VoidCallback onRefresh;
-  final VoidCallback? onOpenSettings;
+
+  /// Called with the centre of the Settings button, in global coordinates,
+  /// so the page can open out of it.
+  final ValueChanged<Offset>? onOpenSettings;
 
   const AppHeaderWidget({
     super.key,
@@ -176,10 +179,17 @@ class AppHeaderWidget extends StatelessWidget {
               ),
             const SizedBox(width: 8),
             if (onOpenSettings != null) ...[
-              _HeaderButton(
-                onPressed: onOpenSettings,
-                tooltip: 'Settings',
-                child: const Icon(Icons.settings_rounded, size: 20),
+              Builder(
+                builder: (buttonContext) => _HeaderButton(
+                  onPressed: () {
+                    final box = buttonContext.findRenderObject() as RenderBox;
+                    onOpenSettings!(
+                      box.localToGlobal(box.size.center(Offset.zero)),
+                    );
+                  },
+                  tooltip: 'Settings',
+                  child: const Icon(Icons.settings_rounded, size: 20),
+                ),
               ),
               const SizedBox(width: 8),
             ],

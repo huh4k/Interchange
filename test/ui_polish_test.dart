@@ -53,7 +53,7 @@ void main() {
             loadingPercentage: 42,
             activeMode: PtvMode.metroTram,
             onRefresh: () {},
-            onOpenSettings: () {},
+            onOpenSettings: (_) {},
           ),
           textScale: 1.6,
         ),
@@ -75,7 +75,7 @@ void main() {
             loadingPercentage: 42,
             activeMode: PtvMode.metroTram,
             onRefresh: () {},
-            onOpenSettings: () {},
+            onOpenSettings: (_) {},
           ),
         ),
       );
