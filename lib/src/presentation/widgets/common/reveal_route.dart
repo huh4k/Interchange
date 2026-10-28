@@ -10,8 +10,8 @@ class RevealRoute<T> extends PageRouteBuilder<T> {
   RevealRoute({required WidgetBuilder builder, required Offset origin})
     : super(
         pageBuilder: (context, _, _) => builder(context),
-        transitionDuration: const Duration(milliseconds: 300),
-        reverseTransitionDuration: const Duration(milliseconds: 230),
+        transitionDuration: const Duration(milliseconds: 200),
+        reverseTransitionDuration: const Duration(milliseconds: 150),
         transitionsBuilder: (context, animation, _, child) {
           final accent = Theme.of(context).colorScheme.primary;
           final reveal = CurvedAnimation(
