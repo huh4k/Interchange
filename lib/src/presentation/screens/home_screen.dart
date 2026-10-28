@@ -108,6 +108,10 @@ class _HomeScreenState extends State<HomeScreen> {
       (vm) => (
         vm.selectedNavIndex,
         vm.activeMode,
+        vm.enabledModes,
+        vm.showAlertBanner,
+        vm.showStaticWarning,
+        vm.usingStaticFallback,
         vm.searchQuery,
         vm.displayedTrips,
         vm.alerts,
