@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class SettingsService {
   static const _themeModeKey = 'theme_mode';
   static const _walkTimeKey = 'walk_time_enabled';
+  static const _busDataKey = 'bus_data_consent';
 
   /// Whether walking time to the selected station is shown. Off by default so
   /// the app never asks for location unprompted.
@@ -16,6 +17,17 @@ class SettingsService {
   Future<void> setWalkTimeEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_walkTimeKey, enabled);
+  }
+
+  /// Whether the user agreed to download the (large) static bus timetable.
+  Future<bool> getBusDataConsent() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_busDataKey) ?? false;
+  }
+
+  Future<void> setBusDataConsent(bool consent) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_busDataKey, consent);
   }
 
   /// Reads the stored [ThemeMode]. Defaults to [ThemeMode.dark].

@@ -427,6 +427,19 @@ void main() {
       });
     });
 
+    test('bus asks before the large download, and remembers the answer', () async {
+      await viewModel.initFuture;
+      expect(viewModel.needsBusDataConsent, isFalse); // not on buses yet
+      viewModel.switchBaseMode(PtvMode.metroBus);
+      expect(viewModel.needsBusDataConsent, isTrue);
+      await viewModel.allowBusDataDownload();
+      expect(viewModel.needsBusDataConsent, isFalse);
+      expect(
+        (await SharedPreferences.getInstance()).getBool('bus_data_consent'),
+        isTrue,
+      );
+    });
+
     test('favorite toggle notifies before persisting completes', () async {
       var notified = 0;
       viewModel.addListener(() => notified++);

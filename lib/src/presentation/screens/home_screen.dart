@@ -28,6 +28,41 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController _searchController = TextEditingController();
 
+  /// Bus timetables are far bigger than the other modes, so ask before the
+  /// first download. Declining keeps live departures only.
+  Future<void> _askBusDataConsent(
+    BuildContext context,
+    TransitViewModel viewModel,
+  ) async {
+    final download = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(
+          Icons.download_rounded,
+          color: AppColors.melbourneBus,
+        ),
+        title: const Text('Download bus timetable?'),
+        content: const Text(
+          'The metro bus timetable is much larger than the other modes and '
+          'may use a lot of mobile data. It gives scheduled times when live '
+          'data is unavailable.\n\nWithout it, buses still show live '
+          'departures.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Live only'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Download'),
+          ),
+        ],
+      ),
+    );
+    if (download == true) await viewModel.allowBusDataDownload();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -123,7 +158,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     // Mode Slider (Trains / Trams)
                     TransitModeSlider(
                       activeMode: viewModel.activeMode,
-                      onModeChanged: viewModel.switchBaseMode,
+                      onModeChanged: (mode) {
+                        viewModel.switchBaseMode(mode);
+                        if (viewModel.needsBusDataConsent) {
+                          _askBusDataConsent(context, viewModel);
+                        }
+                      },
                     ),
                     const SizedBox(height: 8),
 

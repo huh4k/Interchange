@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../domain/entities/live_connection.dart';
@@ -75,6 +76,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
   bool _isSilentRefreshing = false;
   bool _isOffline = false;
   bool _usingStaticFallback = false;
+  bool _busDataConsent = false;
 
   /// Data younger than this is not refetched when the app resumes.
   static const Duration _resumeRefreshThreshold = Duration(seconds: 15);
@@ -141,6 +143,7 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
       _recentStations = recents;
     }
     _walkTimeEnabled = await _settings.getWalkTimeEnabled();
+    _busDataConsent = await _settings.getBusDataConsent();
     notifyListeners();
   }
 
@@ -315,6 +318,19 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
 
   /// True when the last live departures request failed (no connection).
   bool get isOffline => _isOffline;
+
+  /// Static bus data is large, so it is only downloaded once the user agrees.
+  /// On web nothing is cached to disk, so there is no big download to warn of.
+  bool get needsBusDataConsent =>
+      !kIsWeb && _activeMode == PtvMode.metroBus && !_busDataConsent;
+
+  /// The user accepted the bus data download warning: fetch it now.
+  Future<void> allowBusDataDownload() async {
+    _busDataConsent = true;
+    notifyListeners();
+    await _settings.setBusDataConsent(true);
+    await loadData(station: _selectedStation);
+  }
 
   /// True when the departures shown come from the static timetable because
   /// the live feed returned nothing, so times may be inaccurate.
@@ -974,6 +990,8 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
       List<Station> dynamicStops;
       if (canReuseStations) {
         dynamicStops = cachedStops;
+      } else if (stationsMode.isLiveOnly && needsBusDataConsent) {
+        dynamicStops = <Station>[];
       } else if (stationsMode.isLiveOnly) {
         // Static data may not be hosted (or may fail to load): carry on with
         // live PTV search and departures alone.
@@ -1038,8 +1056,9 @@ class TransitViewModel extends ChangeNotifier with WidgetsBindingObserver {
       var fromStaticFallback = false;
       if (livePtvTrips.isNotEmpty) {
         mergedTrips = livePtvTrips;
-      } else if (_activeMode.isLiveOnly && currentSelected.stopId.isEmpty) {
-        // No stop chosen yet, so there is nothing to look up.
+      } else if (_activeMode.isLiveOnly &&
+          (currentSelected.stopId.isEmpty || needsBusDataConsent)) {
+        // No stop chosen yet, or the user hasn't agreed to the download.
       } else {
         // Fallback to static GTFS scheduled trips only if live PTV API returned empty
         updateProgress(0.85, 'Loading Scheduled Timetable Fallback...');
